@@ -46,6 +46,10 @@ parser.add_argument('--modality', '-m', metavar='MODALITY', default='rgb',
                         ' (default: rgb)')
 parser.add_argument('-s', '--num-samples', default=0, type=int, metavar='N',
                     help='number of sparse depth samples (default: 0)')
+parser.add_argument('--depth-limit', default=5.0, type=float, metavar='D',
+                    help='cut-off depth limit of training set (default: 5 [m])')
+parser.add_argument('--num-train-images', default=0, type=int, metavar='NUM_TRAIN_IMAGES',
+                    help='the first NUM_TRAIN_IMAGES are used in training')
 parser.add_argument('--decoder', '-d', metavar='DECODER', default='deconv2',
                     choices=decoder_names,
                     help='decoder: ' +
@@ -85,6 +89,13 @@ fieldnames = ['mse', 'rmse', 'absrel', 'lg10', 'mae',
 best_result = Result()
 best_result.set_to_worst()
 
+# TODO: Move this into enums
+def dim_per_modality(modality):
+    if modality == 'rgbd_near':
+        return 4
+    else:
+        return len(modality)
+
 def main():
     global args, best_result, output_directory, train_csv, test_csv
     args = parser.parse_args()
@@ -95,8 +106,8 @@ def main():
     
     # create results folder, if not already exists
     output_directory = os.path.join('results',
-        'NYUDataset.modality={}.nsample={}.arch={}.decoder={}.criterion={}.lr={}.bs={}'.
-        format(args.modality, args.num_samples, args.arch, args.decoder, args.criterion, args.lr, args.batch_size))
+        'NYUDataset.nimages={}.modality={}.nsample={}.arch={}.decoder={}.criterion={}.lr={}.bs={}.dlimit={}'.
+        format(args.num_train_images, args.modality, args.num_samples, args.arch, args.decoder, args.criterion, args.lr, args.batch_size, args.depth_limit))
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
     train_csv = os.path.join(output_directory, 'train.csv')
@@ -116,15 +127,17 @@ def main():
     traindir = os.path.join(args.data, 'train')
     valdir = os.path.join(args.data, 'val')
 
-    train_dataset = NYUDataset(traindir, type='train', 
-        modality=args.modality, num_samples=args.num_samples)
+    train_dataset = NYUDataset(traindir, type='train',
+                               num_images=args.num_train_images,
+                               modality=args.modality, num_samples=args.num_samples, depth_limit=args.depth_limit)
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True, sampler=None)
 
     # set batch size to be 1 for validation
-    val_dataset = NYUDataset(valdir, type='val', 
-        modality=args.modality, num_samples=args.num_samples)
+    val_dataset = NYUDataset(valdir, type='val',
+                             num_images=0,
+                             modality=args.modality, num_samples=args.num_samples, depth_limit=args.depth_limit)
     val_loader = torch.utils.data.DataLoader(val_dataset, 
         batch_size=1, shuffle=False, num_workers=args.workers, pin_memory=True)
 
@@ -162,7 +175,7 @@ def main():
     else:
         # define model
         print("=> creating Model ({}-{}) ...".format(args.arch, args.decoder))
-        in_channels = len(args.modality)
+        in_channels = dim_per_modality(args.modality)
         if args.arch == 'resnet50':
             model = ResNet(layers=50, decoder=args.decoder, in_channels=in_channels,
                 out_channels=out_channels, pretrained=args.pretrained)
@@ -261,6 +274,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
                   'Lg10={result.lg10:.3f}({average.lg10:.3f}) '.format(
                   epoch, i+1, len(train_loader), data_time=data_time, 
                   gpu_time=gpu_time, result=result, average=average_meter.average()))
+            sys.stdout.flush()
 
     avg = average_meter.average()
     with open(train_csv, 'a') as csvfile: 
@@ -304,13 +318,19 @@ def validate(val_loader, model, epoch, write_to_file=True):
         else:
             if args.modality == 'rgb':
                 rgb = input
-            elif args.modality == 'rgbd':
+            elif args.modality in ['rgbd', 'rgbd_near']:
                 rgb = input[:,:3,:,:]
 
             if i == 0:
-                img_merge = utils.merge_into_row(rgb, target, depth_pred)
+                if args.modality in ['rgbd', 'rgbd_near']:
+                    img_merge = utils.merge_into_row(rgb, input[:,3:,:,:], target, depth_pred)
+                else:
+                    img_merge = utils.merge_into_row(rgb, target, depth_pred)
             elif (i < 8*skip) and (i % skip == 0):
-                row = utils.merge_into_row(rgb, target, depth_pred)
+                if args.modality in ['rgbd', 'rgbd_near']:
+                    row = utils.merge_into_row(rgb, input[:,3:,:,:], target, depth_pred)
+                else:
+                    row = utils.merge_into_row(rgb, target, depth_pred)
                 img_merge = utils.add_row(img_merge, row)
             elif i == 8*skip:
                 filename = output_directory + '/comparison_' + str(epoch) + '.png'
@@ -325,6 +345,7 @@ def validate(val_loader, model, epoch, write_to_file=True):
                   'REL={result.absrel:.3f}({average.absrel:.3f}) '
                   'Lg10={result.lg10:.3f}({average.lg10:.3f}) '.format(
                    i+1, len(val_loader), gpu_time=gpu_time, result=result, average=average_meter.average()))
+            sys.stdout.flush()
 
     avg = average_meter.average()
 

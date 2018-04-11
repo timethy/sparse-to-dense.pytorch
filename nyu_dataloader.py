@@ -18,7 +18,7 @@ def find_classes(dir):
     class_to_idx = {classes[i]: i for i in range(len(classes))}
     return classes, class_to_idx
 
-def make_dataset(dir, class_to_idx):
+def make_dataset(dir, class_to_idx, num_images):
     images = []
     dir = os.path.expanduser(dir)
     for target in sorted(os.listdir(dir)):
@@ -34,7 +34,7 @@ def make_dataset(dir, class_to_idx):
                     item = (path, class_to_idx[target])
                     images.append(item)
 
-    return images
+    return images if num_images == 0 else images[0:num_images]
 
 def h5_loader(path):
     h5f = h5py.File(path, "r")
@@ -94,11 +94,11 @@ def rgb2grayscale(rgb):
 to_tensor = transforms.ToTensor()
 
 class NYUDataset(data.Dataset):
-    modality_names = ['rgb', 'rgbd', 'd'] # , 'g', 'gd'
+    modality_names = ['rgb', 'rgbd', 'rgbd_near', 'd'] # , 'g', 'gd'
 
-    def __init__(self, root, type, modality='rgb', num_samples=0, loader=h5_loader):
+    def __init__(self, root, type, modality='rgb', num_samples=0, num_images=0, depth_limit=0, loader=h5_loader):
         classes, class_to_idx = find_classes(root)
-        imgs = make_dataset(root, class_to_idx)
+        imgs = make_dataset(root, class_to_idx, num_images=num_images)
         if len(imgs) == 0:
             raise(RuntimeError("Found 0 images in subfolders of: " + root + "\n"
                                "Supported image extensions are: " + ",".join(IMG_EXTENSIONS)))
@@ -118,10 +118,15 @@ class NYUDataset(data.Dataset):
 
         if modality in self.modality_names:
             self.modality = modality
+            self.depth_limit = 0
             if modality in ['rgbd', 'd', 'gd']:
                 if num_samples <= 0:
                     raise (RuntimeError("Invalid number of samples: {}\n".format(num_samples)))
                 self.num_samples = num_samples
+            elif modality in ['rgbd_near']:
+                if depth_limit <= 0.0:
+                    raise (RuntimeError("Depth limit must be strictly greater zero: {}\n".format(depth_limit)))
+                self.depth_limit = depth_limit
             else:
                 self.num_samples = 0
         else:
@@ -134,6 +139,13 @@ class NYUDataset(data.Dataset):
         sparse_depth = np.zeros(depth.shape)
         sparse_depth[mask_keep] = depth[mask_keep]
         return sparse_depth
+
+    def create_rgbd_near(self, rgb, depth, depth_limit):
+        mask_keep = depth < depth_limit
+        near_depth = np.zeros(depth.shape)
+        near_depth[mask_keep] = depth[mask_keep]
+        rgbd = np.append(rgb, np.expand_dims(near_depth, axis=2), axis=2)
+        return rgbd
 
     def create_rgbd(self, rgb, depth, num_samples):
         sparse_depth = self.create_sparse_depth(depth, num_samples)
@@ -175,6 +187,8 @@ class NYUDataset(data.Dataset):
             input_np = rgb_np
         elif self.modality == 'rgbd':
             input_np = self.create_rgbd(rgb_np, depth_np, self.num_samples)
+        elif self.modality == 'rgbd_near':
+            input_np = self.create_rgbd_near(rgb_np, depth_np, self.depth_limit)
         elif self.modality == 'd':
             input_np = self.create_sparse_depth(depth_np, self.num_samples)
 
