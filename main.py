@@ -46,8 +46,8 @@ parser.add_argument('--modality', '-m', metavar='MODALITY', default='rgb',
                         ' (default: rgb)')
 parser.add_argument('-s', '--num-samples', default=0, type=int, metavar='N',
                     help='number of sparse depth samples (default: 0)')
-parser.add_argument('--depth-limit', default=5.0, type=float, metavar='D',
-                    help='cut-off depth limit of training set (default: 5 [m])')
+parser.add_argument('--depth-limit', default=0.0, type=float, metavar='D',
+                    help='cut-off depth limit of training set (default: 0 [m])')
 parser.add_argument('--num-train-images', default=0, type=int, metavar='NUM_TRAIN_IMAGES',
                     help='the first NUM_TRAIN_IMAGES are used in training')
 parser.add_argument('--decoder', '-d', metavar='DECODER', default='deconv2',
@@ -90,7 +90,7 @@ best_result = Result()
 best_result.set_to_worst()
 
 # TODO: Move this into enums
-def dim_per_modality(modality):
+def dims_per_modality(modality):
     if modality == 'rgbd_near':
         return 4
     else:
@@ -100,10 +100,13 @@ def main():
     global args, best_result, output_directory, train_csv, test_csv
     args = parser.parse_args()
     args.data = os.path.join('data', args.data)
-    if args.modality == 'rgb' and args.num_samples != 0:
-        print("number of samples is forced to be 0 when input modality is rgb")
+    if args.modality in ['rgb', 'rgbd_near'] and args.num_samples != 0:
+        print("number of samples is forced to be 0 when input modality is rgb/rgbd_near")
         args.num_samples = 0
-    
+    if args.modality == ['rgb', 'rgbd'] and args.depth_limit != 0.0:
+        print("number of samples is forced to be 0.0 when input modality is rgb/rgbd")
+        args.depth_limit = 0.0
+
     # create results folder, if not already exists
     output_directory = os.path.join('results',
         'NYUDataset.nimages={}.modality={}.nsample={}.arch={}.decoder={}.criterion={}.lr={}.bs={}.dlimit={}'.
@@ -175,7 +178,7 @@ def main():
     else:
         # define model
         print("=> creating Model ({}-{}) ...".format(args.arch, args.decoder))
-        in_channels = dim_per_modality(args.modality)
+        in_channels = dims_per_modality(args.modality)
         if args.arch == 'resnet50':
             model = ResNet(layers=50, decoder=args.decoder, in_channels=in_channels,
                 out_channels=out_channels, pretrained=args.pretrained)
@@ -238,7 +241,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
     end = time.time()
     for i, (input, target) in enumerate(train_loader):
-
         input, target = input.cuda(), target.cuda()
         input_var = torch.autograd.Variable(input)
         target_var = torch.autograd.Variable(target)
@@ -323,12 +325,12 @@ def validate(val_loader, model, epoch, write_to_file=True):
 
             if i == 0:
                 if args.modality in ['rgbd', 'rgbd_near']:
-                    img_merge = utils.merge_into_row(rgb, input[:,3:,:,:], target, depth_pred)
+                    img_merge = utils.merge_into_rgbd_row(rgb, input[:,3:,:,:], target, depth_pred)
                 else:
                     img_merge = utils.merge_into_row(rgb, target, depth_pred)
             elif (i < 8*skip) and (i % skip == 0):
                 if args.modality in ['rgbd', 'rgbd_near']:
-                    row = utils.merge_into_row(rgb, input[:,3:,:,:], target, depth_pred)
+                    row = utils.merge_into_rgbd_row(rgb, input[:,3:,:,:], target, depth_pred)
                 else:
                     row = utils.merge_into_row(rgb, target, depth_pred)
                 img_merge = utils.add_row(img_merge, row)

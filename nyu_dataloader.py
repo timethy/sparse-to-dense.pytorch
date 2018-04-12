@@ -141,8 +141,10 @@ class NYUDataset(data.Dataset):
         return sparse_depth
 
     def create_rgbd_near(self, rgb, depth, depth_limit):
-        mask_keep = depth < depth_limit
+        mask_keep = depth <= depth_limit
         near_depth = np.zeros(depth.shape)
+        # TODO: Setting to initialize missing depth values
+        near_depth[:, :] = depth_limit
         near_depth[mask_keep] = depth[mask_keep]
         rgbd = np.append(rgb, np.expand_dims(near_depth, axis=2), axis=2)
         return rgbd
