@@ -4,37 +4,47 @@ from PIL import Image
 
 cmap = plt.cm.viridis
 
+
+def colored_depthmap(depth, d_min=None, d_max=None):
+    if not d_min:
+        d_min = np.min(depth)
+    if not d_max:
+        d_max = np.max(depth)
+    depth_relative = (depth - d_min) / (d_max - d_min)
+    return 255 * cmap(depth_relative)[:,:,:3] # H, W, C
+
+
 def merge_into_row(input, target, depth_pred):
     rgb = 255 * np.transpose(np.squeeze(input.cpu().numpy()), (1,2,0)) # H, W, C
     depth = np.squeeze(target.cpu().numpy())
-    depth = (depth - np.min(depth)) / (np.max(depth) - np.min(depth))
-    depth = 255 * cmap(depth)[:,:,:3] # H, W, C
+    depth = colored_depthmap(depth)
     pred = np.squeeze(depth_pred.data.cpu().numpy())
-    pred = (pred - np.min(pred)) / (np.max(pred) - np.min(pred))
-    pred = 255 * cmap(pred)[:,:,:3] # H, W, C
+    pred = colored_depthmap(pred)
     img_merge = np.hstack([rgb, depth, pred])
     
-    # img_merge.save(output_directory + '/comparison_' + str(epoch) + '.png')
     return img_merge
 
-def merge_into_row(input, depth_sparse, target, depth_pred):
+
+def merge_into_rgbd_row(input, depth_input, depth_target, depth_pred):
     rgb = 255 * np.transpose(np.squeeze(input.cpu().numpy()), (1,2,0)) # H, W, C
-    depth_sparse = np.squeeze(depth_sparse.cpu().numpy())
-    depth_sparse = (depth_sparse - np.min(depth_sparse)) / (np.max(depth_sparse) - np.min(depth_sparse))
-    depth_sparse = 255 * cmap(depth_sparse)[:,:,:3] # H, W, C
-    depth = np.squeeze(target.cpu().numpy())
-    depth = (depth - np.min(depth)) / (np.max(depth) - np.min(depth))
-    depth = 255 * cmap(depth)[:,:,:3] # H, W, C
-    pred = np.squeeze(depth_pred.data.cpu().numpy())
-    pred = (pred - np.min(pred)) / (np.max(pred) - np.min(pred))
-    pred = 255 * cmap(pred)[:,:,:3] # H, W, C
-    img_merge = np.hstack([rgb, depth_sparse, depth, pred])
+    depth_input_cpu = np.squeeze(depth_input.cpu().numpy())
+    depth_target_cpu = np.squeeze(depth_target.cpu().numpy())
+    depth_pred_cpu = np.squeeze(depth_pred.data.cpu().numpy())
 
-    # img_merge.save(output_directory + '/comparison_' + str(epoch) + '.png')
+    d_min = min(np.min(depth_input_cpu), np.min(depth_target_cpu), np.min(depth_pred_cpu))
+    d_max = max(np.max(depth_input_cpu), np.max(depth_target_cpu), np.max(depth_pred_cpu))
+    depth_input_col = colored_depthmap(depth_input)
+    depth_target_col = colored_depthmap(depth_target)
+    depth_pred_col = colored_depthmap(depth_pred, d_min, d_max)
+
+    img_merge = np.hstack([rgb, depth_input_col, depth_target_col, depth_pred_col])
+
     return img_merge
+
 
 def add_row(img_merge, row):
     return np.vstack([img_merge, row])
+
 
 def save_image(img_merge, filename):
     img_merge = Image.fromarray(img_merge.astype('uint8'))
