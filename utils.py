@@ -6,9 +6,9 @@ cmap = plt.cm.viridis
 
 
 def colored_depthmap(depth, d_min=None, d_max=None):
-    if not d_min:
+    if d_min is not None:
         d_min = np.min(depth)
-    if not d_max:
+    if d_max is not None:
         d_max = np.max(depth)
     depth_relative = (depth - d_min) / (d_max - d_min)
     return 255 * cmap(depth_relative)[:,:,:3] # H, W, C
@@ -33,9 +33,9 @@ def merge_into_rgbd_row(input, depth_input, depth_target, depth_pred):
 
     d_min = min(np.min(depth_input_cpu), np.min(depth_target_cpu), np.min(depth_pred_cpu))
     d_max = max(np.max(depth_input_cpu), np.max(depth_target_cpu), np.max(depth_pred_cpu))
-    depth_input_col = colored_depthmap(depth_input)
-    depth_target_col = colored_depthmap(depth_target)
-    depth_pred_col = colored_depthmap(depth_pred, d_min, d_max)
+    depth_input_col = colored_depthmap(depth_input_cpu, d_min, d_max)
+    depth_target_col = colored_depthmap(depth_target_cpu, d_min, d_max)
+    depth_pred_col = colored_depthmap(depth_pred_cpu, d_min, d_max)
 
     img_merge = np.hstack([rgb, depth_input_col, depth_target_col, depth_pred_col])
 

@@ -20,7 +20,7 @@ import utils
 
 model_names = ['resnet18', 'resnet50']
 loss_names = ['l1', 'l2']
-data_names = ['NYUDataset']
+data_names = ['NYUDataset', 'small_world_1']
 decoder_names = Decoder.names
 modality_names = NYUDataset.modality_names
 
@@ -89,7 +89,6 @@ fieldnames = ['mse', 'rmse', 'absrel', 'lg10', 'mae',
 best_result = Result()
 best_result.set_to_worst()
 
-# TODO: Move this into enums
 def dims_per_modality(modality):
     if modality == 'rgbd_near':
         return 4
@@ -250,7 +249,11 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # compute depth_pred
         end = time.time()
         depth_pred = model(input_var)
-        loss = criterion(depth_pred, target_var)
+        # TODO Make this a setting:
+        # TODO Maybe encode unknown depth as negative depth
+        # Which part of the image is unknown
+        pred_mask = (input_var[:,:,3:] == 0).detach()
+        loss = criterion(depth_pred[pred_mask], target_var[pred_mask])
         optimizer.zero_grad()
         loss.backward() # compute gradient and do SGD step
         optimizer.step()
@@ -314,7 +317,7 @@ def validate(val_loader, model, epoch, write_to_file=True):
         end = time.time()
 
         # save 8 images for visualization
-        skip = 50
+        skip = 10
         if args.modality == 'd':
             img_merge = None
         else:

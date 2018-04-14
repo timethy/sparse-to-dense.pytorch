@@ -39,8 +39,13 @@ def make_dataset(dir, class_to_idx, num_images):
 def h5_loader(path):
     h5f = h5py.File(path, "r")
     rgb = np.array(h5f['rgb'])
-    rgb = np.transpose(rgb, (1, 2, 0))
+    # TODO: Switch, o by checking
+#    rgb = np.transpose(rgb, (1, 2, 0))
     depth = np.array(h5f['depth'])
+
+    # mask out depth
+    mask = np.isnan(depth)
+    depth[mask] = 0.0
 
     return rgb, depth
 
@@ -49,17 +54,14 @@ oheight, owidth = 228, 304 # image size after pre-processing
 color_jitter = transforms.ColorJitter(0.4, 0.4, 0.4)
 
 def train_transform(rgb, depth):
-    s = np.random.uniform(1.0, 1.5) # random scaling
-    # print("scale factor s={}".format(s))
-    depth_np = depth / s
-    angle = np.random.uniform(-5.0, 5.0) # random rotation degrees
+    # s = np.random.uniform(1.0, 1.5) # random scaling
+    # depth_np = depth / s
+    depth_np = depth
     do_flip = np.random.uniform(0.0, 1.0) < 0.5 # random horizontal flip
 
     # perform 1st part of data augmentation
     transform = transforms.Compose([
-        transforms.Resize(250.0 / iheight), # this is for computational efficiency, since rotation is very slow
-        transforms.Rotate(angle),
-        transforms.Resize(s),
+        transforms.Resize(240.0 / iheight),
         transforms.CenterCrop((oheight, owidth)),
         transforms.HorizontalFlip(do_flip)
     ])
@@ -133,7 +135,11 @@ class NYUDataset(data.Dataset):
             raise (RuntimeError("Invalid modality type: " + modality + "\n"
                                 "Supported dataset types are: " + ''.join(self.modality_names)))
 
-    def create_sparse_depth(self, depth, num_samples):
+    def create_sparse_depth(self, depth, num_samples, depth_limit=None):
+        if depth_limit:
+            mask_keep = depth <= depth_limit
+            depth = np.zeros(depth.shape)
+            depth[mask_keep] = depth[mask_keep]
         prob = float(num_samples) / depth.size
         mask_keep = np.random.uniform(0, 1, depth.shape) < prob
         sparse_depth = np.zeros(depth.shape)
@@ -143,14 +149,14 @@ class NYUDataset(data.Dataset):
     def create_rgbd_near(self, rgb, depth, depth_limit):
         mask_keep = depth <= depth_limit
         near_depth = np.zeros(depth.shape)
-        # TODO: Setting to initialize missing depth values
+        # TODO: Setting to initialize missing depth values with zero or other value
         near_depth[:, :] = depth_limit
         near_depth[mask_keep] = depth[mask_keep]
         rgbd = np.append(rgb, np.expand_dims(near_depth, axis=2), axis=2)
         return rgbd
 
-    def create_rgbd(self, rgb, depth, num_samples):
-        sparse_depth = self.create_sparse_depth(depth, num_samples)
+    def create_rgbd(self, rgb, depth, num_samples, depth_limit):
+        sparse_depth = self.create_sparse_depth(depth, num_samples, depth_limit)
         # rgbd = np.dstack((rgb[:,:,0], rgb[:,:,1], rgb[:,:,2], sparse_depth))
         rgbd = np.append(rgb, np.expand_dims(sparse_depth, axis=2), axis=2)
         return rgbd
@@ -188,7 +194,7 @@ class NYUDataset(data.Dataset):
         if self.modality == 'rgb':
             input_np = rgb_np
         elif self.modality == 'rgbd':
-            input_np = self.create_rgbd(rgb_np, depth_np, self.num_samples)
+            input_np = self.create_rgbd(rgb_np, depth_np, self.num_samples, self.depth_limit)
         elif self.modality == 'rgbd_near':
             input_np = self.create_rgbd_near(rgb_np, depth_np, self.depth_limit)
         elif self.modality == 'd':
