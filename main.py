@@ -20,7 +20,7 @@ import utils
 
 model_names = ['resnet18', 'resnet50']
 loss_names = ['l1', 'l2']
-data_names = ['NYUDataset', 'small_world_1']
+data_names = ['NYUDataset', 'small_world_1', 'small_world_2']
 decoder_names = Decoder.names
 modality_names = NYUDataset.modality_names
 
@@ -98,7 +98,6 @@ def dims_per_modality(modality):
 def main():
     global args, best_result, output_directory, train_csv, test_csv
     args = parser.parse_args()
-    args.data = os.path.join('data', args.data)
     if args.modality in ['rgb', 'rgbd_near'] and args.num_samples != 0:
         print("number of samples is forced to be 0 when input modality is rgb/rgbd_near")
         args.num_samples = 0
@@ -108,8 +107,8 @@ def main():
 
     # create results folder, if not already exists
     output_directory = os.path.join('results',
-        'NYUDataset.nimages={}.modality={}.nsample={}.arch={}.decoder={}.criterion={}.lr={}.bs={}.dlimit={}'.
-        format(args.num_train_images, args.modality, args.num_samples, args.arch, args.decoder, args.criterion, args.lr, args.batch_size, args.depth_limit))
+        '{}.nimages={}.modality={}.nsample={}.arch={}.decoder={}.criterion={}.lr={}.bs={}.dlimit={}'.
+        format(args.data, args.num_train_images, args.modality, args.num_samples, args.arch, args.decoder, args.criterion, args.lr, args.batch_size, args.depth_limit))
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
     train_csv = os.path.join(output_directory, 'train.csv')
@@ -126,8 +125,8 @@ def main():
 
     # Data loading code
     print("=> creating data loaders ...")
-    traindir = os.path.join(args.data, 'train')
-    valdir = os.path.join(args.data, 'val')
+    traindir = os.path.join('data', args.data, 'train')
+    valdir = os.path.join('data', args.data, 'val')
 
     train_dataset = NYUDataset(traindir, type='train',
                                num_images=args.num_train_images,
@@ -252,7 +251,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # TODO Make this a setting:
         # TODO Maybe encode unknown depth as negative depth
         # Which part of the image is unknown
-        pred_mask = (input_var[:,:,3:] == 0).detach()
+        pred_mask = (input_var[:, 3:, :, :] == 0).detach()
         loss = criterion(depth_pred[pred_mask], target_var[pred_mask])
         optimizer.zero_grad()
         loss.backward() # compute gradient and do SGD step
