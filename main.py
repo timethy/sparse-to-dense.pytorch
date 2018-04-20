@@ -21,7 +21,7 @@ import utils
 
 model_names = ['resnet18', 'resnet50']
 loss_names = ['l1', 'l2']
-data_names = ['nyudepthv2', 'small_world_1', 'small_world_2']
+data_names = ['nyudepthv2']
 sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo]]
 decoder_names = Decoder.names
 modality_names = NYUDataset.modality_names
@@ -50,6 +50,11 @@ parser.add_argument('-s', '--num-samples', default=0, type=int, metavar='N',
                     help='number of sparse depth samples (default: 0)')
 parser.add_argument('--max-depth', default=-1.0, type=float, metavar='D',
                     help='cut-off depth of sparsifier, negative values means infinity (default: inf [m])')
+parser.add_argument('--sparsifier', metavar='SPARSIFIER', default=UniformSampling.name,
+                    choices=sparsifier_names,
+                    help='sparsifier: ' +
+                         ' | '.join(sparsifier_names) +
+                         ' (default: ' + UniformSampling.name + ')')
 parser.add_argument('--decoder', '-d', metavar='DECODER', default='deconv2',
                     choices=decoder_names,
                     help='decoder: ' +
@@ -57,8 +62,8 @@ parser.add_argument('--decoder', '-d', metavar='DECODER', default='deconv2',
                         ' (default: deconv2)')
 parser.add_argument('-j', '--workers', default=10, type=int, metavar='N',
                     help='number of data loading workers (default: 10)')
-parser.add_argument('--epochs', default=30, type=int, metavar='N',
-                    help='number of total epochs to run (default: 30)')
+parser.add_argument('--epochs', default=15, type=int, metavar='N',
+                    help='number of total epochs to run (default: 15)')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('-c', '--criterion', metavar='LOSS', default='l1', 
@@ -109,7 +114,7 @@ def main():
 
     # create results folder, if not already exists
     output_directory = os.path.join('results',
-        '{}.sparsifier=({}).modality={}.arch={}.decoder={}.criterion={}.lr={}.bs={}'.
+        '{}.sparsifier={}.modality={}.arch={}.decoder={}.criterion={}.lr={}.bs={}'.
                                     format(args.data, sparsifier, args.modality, args.arch, args.decoder, args.criterion, args.lr, args.batch_size))
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
@@ -120,15 +125,14 @@ def main():
     # define loss function (criterion) and optimizer
     if args.criterion == 'l2':
         criterion = criteria.MaskedMSELoss().cuda()
-        out_channels = 1
     elif args.criterion == 'l1':
         criterion = criteria.MaskedL1Loss().cuda()
-        out_channels = 1
+    out_channels = 1
 
     # Data loading code
     print("=> creating data loaders ...")
-    traindir = os.path.join('/home/tim/data', args.data, 'train')
-    valdir = os.path.join('/home/tim/data', args.data, 'val')
+    traindir = os.path.join('data', args.data, 'train')
+    valdir = os.path.join('data', args.data, 'val')
 
     train_dataset = NYUDataset(traindir, type='train',
                                modality=args.modality,
@@ -173,6 +177,7 @@ def main():
             print("=> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
+            return
 
     # create new model
     else:
@@ -250,11 +255,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # compute depth_pred
         end = time.time()
         depth_pred = model(input_var)
-        # TODO Make this a setting:
-        # TODO Maybe encode unknown depth as negative depth
-        # Which part of the image is unknown
-        pred_mask = (input_var[:, 3:, :, :] == 0).detach()
-        loss = criterion(depth_pred[pred_mask], target_var[pred_mask])
+        loss = criterion(depth_pred, target_var)
         optimizer.zero_grad()
         loss.backward() # compute gradient and do SGD step
         optimizer.step()
@@ -280,7 +281,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
                   'Lg10={result.lg10:.3f}({average.lg10:.3f}) '.format(
                   epoch, i+1, len(train_loader), data_time=data_time, 
                   gpu_time=gpu_time, result=result, average=average_meter.average()))
-            sys.stdout.flush()
 
     avg = average_meter.average()
     with open(train_csv, 'a') as csvfile: 
@@ -318,7 +318,7 @@ def validate(val_loader, model, epoch, write_to_file=True):
         end = time.time()
 
         # save 8 images for visualization
-        skip = 10
+        skip = 50
         if args.modality == 'd':
             img_merge = None
         else:
@@ -352,7 +352,6 @@ def validate(val_loader, model, epoch, write_to_file=True):
                   'REL={result.absrel:.3f}({average.absrel:.3f}) '
                   'Lg10={result.lg10:.3f}({average.lg10:.3f}) '.format(
                    i+1, len(val_loader), gpu_time=gpu_time, result=result, average=average_meter.average()))
-            sys.stdout.flush()
 
     avg = average_meter.average()
 
@@ -386,8 +385,8 @@ def save_checkpoint(state, is_best, epoch):
             os.remove(prev_checkpoint_filename)
 
 def adjust_learning_rate(optimizer, epoch):
-    """Sets the learning rate to the initial LR decayed by 10 every 10 epochs"""
-    lr = args.lr * (0.1 ** (epoch // 10))
+    """Sets the learning rate to the initial LR decayed by 10 every 5 epochs"""
+    lr = args.lr * (0.1 ** (epoch // 5))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 

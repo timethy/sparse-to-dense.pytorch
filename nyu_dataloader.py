@@ -39,14 +39,13 @@ def make_dataset(dir, class_to_idx):
 
 def h5_loader(path):
     h5f = h5py.File(path, "r")
-    rgb = np.array(h5f['rgb'], dtype=np.uint8)
-    # TODO: Switch, o by checking
-    # rgb = np.transpose(rgb, (1, 2, 0))
-    depth = np.array(h5f['depth'], dtype=np.float)
+    rgb = np.array(h5f['rgb'])
+    rgb = np.transpose(rgb, (1, 2, 0))
+    depth = np.array(h5f['depth'])
 
     # mask out depth
-    mask = np.isnan(depth)
-    depth[mask] = 0.0
+    #mask = np.isnan(depth)
+    #depth[mask] = 0.0
 
     return rgb, depth
 
@@ -55,14 +54,17 @@ oheight, owidth = 228, 304 # image size after pre-processing
 color_jitter = transforms.ColorJitter(0.4, 0.4, 0.4)
 
 def train_transform(rgb, depth):
-    # s = np.random.uniform(1.0, 1.5) # random scaling
-    # depth_np = depth / s
-    depth_np = depth
+    s = np.random.uniform(1.0, 1.5) # random scaling
+    # print("scale factor s={}".format(s))
+    depth_np = depth / s
+    angle = np.random.uniform(-5.0, 5.0) # random rotation degrees
     do_flip = np.random.uniform(0.0, 1.0) < 0.5 # random horizontal flip
 
     # perform 1st part of data augmentation
     transform = transforms.Compose([
-        transforms.Resize(240.0 / iheight),
+        transforms.Resize(250.0 / iheight), # this is for computational efficiency, since rotation is very slow
+        transforms.Rotate(angle),
+        transforms.Resize(s),
         transforms.CenterCrop((oheight, owidth)),
         transforms.HorizontalFlip(do_flip)
     ])
