@@ -13,6 +13,7 @@ import torch.optim
 import torch.utils.data
 
 from nyu_dataloader import NYUDataset
+from scenenet_loader import ScenenetDataset
 from models import Decoder, ResNet
 from metrics import AverageMeter, Result
 from dense_to_sparse import UniformSampling, SimulatedStereo
@@ -21,7 +22,7 @@ import utils
 
 model_names = ['resnet18', 'resnet50']
 loss_names = ['l1', 'l2']
-data_names = ['nyudepthv2']
+data_names = ['nyudepthv2', "scenenet"]
 sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo]]
 decoder_names = Decoder.names
 modality_names = NYUDataset.modality_names
@@ -133,15 +134,25 @@ def main():
     traindir = os.path.join('data', args.data, 'train')
     valdir = os.path.join('data', args.data, 'val')
 
-    train_dataset = NYUDataset(traindir, type='train',
-        modality=args.modality, sparsifier=sparsifier)
+    if args.data == "nyudepthv2":
+        train_dataset = NYUDataset(traindir, type='train',
+                                   modality=args.modality, sparsifier=sparsifier)
+        val_dataset = NYUDataset(valdir, type='val',
+                                 modality=args.modality, sparsifier=sparsifier)
+    elif args.data == "scenenet":
+        train_dataset = ScenenetDataset(traindir, type='train',
+                                        modality=args.modality, sparsifier=sparsifier, trajectory_indices=[0, 299])
+        val_dataset = ScenenetDataset(valdir, type='val',
+                                      modality=args.modality, sparsifier=sparsifier, trajectory_indices=[0, 299])
+    else:
+        print("Wrong dataset, must be one of: " + ' | '.join(data_names) + ' (default: nyudepthv2)')
+        return
+
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True, sampler=None)
 
     # set batch size to be 1 for validation
-    val_dataset = NYUDataset(valdir, type='val',
-        modality=args.modality, sparsifier=sparsifier)
     val_loader = torch.utils.data.DataLoader(val_dataset,
         batch_size=1, shuffle=False, num_workers=args.workers, pin_memory=True)
 
@@ -231,7 +242,7 @@ def main():
             'arch': args.arch,
             'model': model,
             'best_result': best_result,
-            'optimizer' : optimizer,
+            'optimizer': optimizer,
         }, is_best, epoch)
 
 
