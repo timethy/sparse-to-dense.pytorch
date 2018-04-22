@@ -26,7 +26,7 @@ class UniformSampling(DenseToSparse):
         self.max_depth = max_depth
 
     def __repr__(self):
-        return "%s{ns=%d,md=%f}" % (self.name, self.num_samples, self.max_depth)
+        return "%s{ns=%d,md=%.4f}" % (self.name, self.num_samples, self.max_depth)
 
     def dense_to_sparse(self, rgb, depth):
         """
@@ -58,7 +58,7 @@ class SimulatedStereo(DenseToSparse):
         self.dilate_iterations = dilate_iterations
 
     def __repr__(self):
-        return "%s{ns=%d,md=%f,dil=%d.%d}" % \
+        return "%s{ns=%d,md=%.4f,dil=%d.%d}" % \
                (self.name, self.num_samples, self.max_depth, self.dilate_kernel, self.dilate_iterations)
 
     # We do not use cv2.Canny, since that applies non max suppression
@@ -79,12 +79,14 @@ class SimulatedStereo(DenseToSparse):
         edge_fraction = float(self.num_samples) / np.size(depth)
 
         mag = cv2.magnitude(gx, gy)
-        min_mag = np.percentile(mag[depth_mask], 100 * (1.0 - edge_fraction))
-        mag_mask = mag >= min_mag
+        if np.count_nonzero(depth_mask) > 0:
+            min_mag = np.percentile(mag[depth_mask], 100 * (1.0 - edge_fraction))
+            mag_mask = mag >= min_mag
 
-        if self.dilate_iterations >= 0:
-            kernel = np.ones((self.dilate_kernel, self.dilate_kernel), dtype=np.uint8)
-            cv2.dilate(mag_mask.astype(np.uint8), kernel, iterations=self.dilate_iterations)
+            if self.dilate_iterations >= 0:
+                kernel = np.ones((self.dilate_kernel, self.dilate_kernel), dtype=np.uint8)
+                cv2.dilate(mag_mask.astype(np.uint8), kernel, iterations=self.dilate_iterations)
 
-        mask = np.bitwise_and(mag_mask, depth_mask)
-        return mask
+            return np.bitwise_and(mag_mask, depth_mask)
+        else:
+            return depth_mask

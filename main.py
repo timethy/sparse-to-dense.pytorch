@@ -12,6 +12,8 @@ import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
 
+import numpy as np
+
 from nyu_dataloader import NYUDataset
 from scenenet_loader import ScenenetDataset
 from models import Decoder, ResNet
@@ -88,6 +90,8 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                     help='evaluate model on validation set')
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                     default=True, help='use ImageNet pre-trained weights (default: True)')
+parser.add_argument('--use-input', dest='use_input', action='store_true',
+                    default=True, help='use depthmap input to overwrite output (default: True)')
 
 fieldnames = ['mse', 'rmse', 'absrel', 'lg10', 'mae', 
                 'delta1', 'delta2', 'delta3', 
@@ -264,6 +268,10 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # compute depth_pred
         end = time.time()
         depth_pred = model(input_var)
+        if args.use_input:
+            in_depth = input[:, 3:, :, :]
+            in_valid = in_depth > 0.0
+            depth_pred[in_valid] = in_depth[in_valid]
         loss = criterion(depth_pred, target_var)
         optimizer.zero_grad()
         loss.backward() # compute gradient and do SGD step
@@ -316,6 +324,10 @@ def validate(val_loader, model, epoch, write_to_file=True):
         # compute output
         end = time.time()
         depth_pred = model(input_var)
+        if args.use_input:
+            in_depth = input[:, 3:, :, :]
+            in_valid = in_depth > 0.0
+            depth_pred[in_valid] = in_depth[in_valid]
         torch.cuda.synchronize()
         gpu_time = time.time() - end
 
@@ -401,3 +413,4 @@ def adjust_learning_rate(optimizer, epoch):
 
 if __name__ == '__main__':
     main()
+
