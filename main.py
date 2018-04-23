@@ -2,11 +2,9 @@ import argparse
 import os
 import shutil
 import time
-import sys
 import csv
 
 import torch
-import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim
@@ -92,6 +90,10 @@ parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                     default=True, help='use ImageNet pre-trained weights (default: True)')
 parser.add_argument('--use-input', dest='use_input', action='store_true',
                     default=False, help='use depthmap input to overwrite output (default: False)')
+parser.add_argument('--width', type=int, metavar='W',
+                    default=304, help='The width of the input layer of the network (default: 304)')
+parser.add_argument('--height', type=int, metavar='H',
+                    default=228, help='The height of the input layer of the network (default: 228)')
 
 fieldnames = ['mse', 'rmse', 'absrel', 'lg10', 'mae', 
                 'delta1', 'delta2', 'delta3', 
@@ -142,14 +144,20 @@ def main():
 
     if args.data == "nyudepthv2":
         train_dataset = NYUDataset(traindir, type='train',
-                                   modality=args.modality, sparsifier=sparsifier)
+                                   modality=args.modality, sparsifier=sparsifier, oheight=args.oheight, owidth=args.owidth)
         val_dataset = NYUDataset(valdir, type='val',
-                                 modality=args.modality, sparsifier=sparsifier)
+                                 modality=args.modality, sparsifier=sparsifier, oheight=args.oheight, owidth=args.owidth)
     elif args.data == "scenenet":
+        train_indices = range(0, 300, 13)  # total of 24 per trajectory
+        val_indices = range(0, 300, 26)  # total of 12 per trajectory
         train_dataset = ScenenetDataset(traindir, type='train',
-                                        modality=args.modality, sparsifier=sparsifier, trajectory_indices=[0, 299])
+                                        modality=args.modality, sparsifier=sparsifier,
+                                        trajectory_indices=train_indices,
+                                        oheight=args.height, owidth=args.width)
         val_dataset = ScenenetDataset(valdir, type='val',
-                                      modality=args.modality, sparsifier=sparsifier, trajectory_indices=[0, 299])
+                                      modality=args.modality, sparsifier=sparsifier,
+                                      trajectory_indices=val_indices,
+                                      oheight=args.height, owidth=args.width)
     else:
         print("Wrong dataset, must be one of: " + ' | '.join(data_names) + ' (default: nyudepthv2)')
         return
@@ -200,10 +208,10 @@ def main():
         in_channels = len(args.modality)
         if args.arch == 'resnet50':
             model = ResNet(layers=50, decoder=args.decoder, in_channels=in_channels,
-                out_channels=out_channels, pretrained=args.pretrained)
+                out_channels=out_channels, pretrained=args.pretrained, oheight=args.height, owidth=args.width)
         elif args.arch == 'resnet18':
             model = ResNet(layers=18, decoder=args.decoder, in_channels=in_channels,
-                out_channels=out_channels, pretrained=args.pretrained)
+                out_channels=out_channels, pretrained=args.pretrained, oheight=args.height, owidth=args.width)
         print("=> model created.")
 
         optimizer = torch.optim.SGD(model.parameters(), args.lr,
@@ -237,8 +245,8 @@ def main():
         if is_best:
             best_result = result
             with open(best_txt, 'w') as txtfile:
-                txtfile.write("epoch={}\nmse={:.3f}\nrmse={:.3f}\nabsrel={:.3f}\nlg10={:.3f}\nmae={:.3f}\ndelta1={:.3f}\nt_gpu={:.4f}\n".
-                    format(epoch, result.mse, result.rmse, result.absrel, result.lg10, result.mae, result.delta1, result.gpu_time))
+                txtfile.write("epoch={}\nmse={:.3f}\nrmse={:.3f}\nabsrel={:.3f}\nlg10={:.3f}\nmae={:.3f}\ndelta1={:.3f}\ndelta2={:.3f}\ndelta3={:.3f}\nt_gpu={:.4f}\n".
+                    format(epoch, result.mse, result.rmse, result.absrel, result.lg10, result.mae, result.delta1, result.delta2, result.delta3, result.gpu_time))
             if img_merge is not None:
                 img_filename = output_directory + '/comparison_best.png'
                 utils.save_image(img_merge, img_filename)
@@ -296,6 +304,8 @@ def train(train_loader, model, criterion, optimizer, epoch):
                   'RMSE={result.rmse:.2f}({average.rmse:.2f}) '
                   'MAE={result.mae:.2f}({average.mae:.2f}) '
                   'Delta1={result.delta1:.3f}({average.delta1:.3f}) '
+                  'Delta2={result.delta2:.3f}({average.delta2:.3f}) '
+                  'Delta3={result.delta3:.3f}({average.delta3:.3f}) '
                   'REL={result.absrel:.3f}({average.absrel:.3f}) '
                   'Lg10={result.lg10:.3f}({average.lg10:.3f}) '.format(
                   epoch, i+1, len(train_loader), data_time=data_time, 
@@ -372,6 +382,8 @@ def validate(val_loader, model, epoch, write_to_file=True):
                   'RMSE={result.rmse:.2f}({average.rmse:.2f}) '
                   'MAE={result.mae:.2f}({average.mae:.2f}) '
                   'Delta1={result.delta1:.3f}({average.delta1:.3f}) '
+                  'Delta2={result.delta2:.3f}({average.delta2:.3f}) '
+                  'Delta3={result.delta3:.3f}({average.delta3:.3f}) '
                   'REL={result.absrel:.3f}({average.absrel:.3f}) '
                   'Lg10={result.lg10:.3f}({average.lg10:.3f}) '.format(
                    i+1, len(val_loader), gpu_time=gpu_time, result=result, average=average_meter.average()))
@@ -382,6 +394,8 @@ def validate(val_loader, model, epoch, write_to_file=True):
         'RMSE={average.rmse:.3f}\n'
         'MAE={average.mae:.3f}\n'
         'Delta1={average.delta1:.3f}\n'
+        'Delta2={average.delta2:.3f}\n'
+        'Delta3={average.delta3:.3f}\n'
         'REL={average.absrel:.3f}\n'
         'Lg10={average.lg10:.3f}\n'
         't_GPU={time:.3f}\n'.format(

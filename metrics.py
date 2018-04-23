@@ -60,13 +60,13 @@ class AverageMeter(object):
         self.reset()
 
     def reset(self):
-        self.count = 0.0
+        self.count = 0
 
-        self.sum_irmse, self.sum_imae = 0, 0
-        self.sum_mse, self.sum_rmse, self.sum_mae = 0, 0, 0
-        self.sum_absrel, self.sum_lg10 = 0, 0
-        self.sum_delta1, self.sum_delta2, self.sum_delta3 = 0, 0, 0
-        self.sum_data_time, self.sum_gpu_time = 0, 0
+        self.sum_irmse, self.sum_imae = 0.0, 0.0
+        self.sum_mse, self.sum_rmse, self.sum_mae = 0.0, 0.0, 0.0
+        self.sum_absrel, self.sum_lg10 = 0.0, 0.0
+        self.sum_delta1, self.sum_delta2, self.sum_delta3 = 0.0, 0.0, 0.0
+        self.sum_data_time, self.sum_gpu_time = 0.0, 0.0
 
     def update(self, result, gpu_time, data_time, n=1):
         self.count += n

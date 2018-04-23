@@ -6,8 +6,10 @@ import os.path
 import numpy as np
 import torch.utils.data as data
 from PIL import Image
-from nyu_dataloader import to_tensor, iheight, oheight, iwidth, owidth, color_jitter
 import transforms
+
+
+to_tensor = transforms.ToTensor()
 
 
 def load_depth_map_in_m(file_name):
@@ -51,28 +53,35 @@ def make_dataset(dir, trajectory_to_idx):
     return trajectories
 
 
-def transform(rgb, depth):
-    depth_np = depth
+def train_transform(oheight, owidth):
+    do_flip = np.random.uniform(0.0, 1.0) < 0.5  # random horizontal flip
 
-    # perform 1st part of data augmentation
-    transform = transforms.Compose([
+    ts = [
+        transforms.CenterCrop((oheight, owidth)),
+        transforms.HorizontalFlip(do_flip)]
+
+    return transforms.Compose(ts), transforms.Compose(ts + [transforms.ColorJitter(0.4, 0.4, 0.4, 0.4)])
+
+
+def val_transform(oheight, owidth):
+    t = transforms.Compose([
         transforms.CenterCrop((oheight, owidth)),
     ])
-    rgb_np = np.asfarray(transform(rgb), dtype=np.float) / 255.0
-    depth_np = transform(depth_np)
-
-    return rgb_np, depth_np
+    return t, t
 
 
 class ScenenetDataset(data.Dataset):
     modality_names = ['rgb', 'rgbd', 'd'] # , 'g', 'gd'
 
-    def __init__(self, root, type, trajectory_indices, sparsifier=None, modality='rgb', loader=load_trajectory_image):
+    def __init__(self, root, type, trajectory_indices, oheight, owidth,
+                 sparsifier=None, modality='rgb', loader=load_trajectory_image):
         self.trajectories = find_trajectories(root)
         print("Found %d trajectories" % len(self.trajectories))
         # Load all of the images in trajectory for now
         self.trajectory_indices = trajectory_indices
-        self.transform = transform
+        self.oheight = oheight
+        self.owidth = owidth
+        self.transform = train_transform if type == 'train' else val_transform
 
         self.root = root
 
@@ -125,7 +134,9 @@ class ScenenetDataset(data.Dataset):
         """
         rgb, depth = self.__getraw__(index)
         if self.transform is not None:
-            rgb_np, depth_np = self.transform(rgb, depth)
+            depth_transform, rgb_transform = self.transform(self.oheight, self.owidth)
+            rgb_np = np.asfarray(rgb_transform(rgb), dtype=np.float) / 255.0
+            depth_np = depth_transform(depth)
         else:
             raise(RuntimeError("transform not defined"))
 

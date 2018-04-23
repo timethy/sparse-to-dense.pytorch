@@ -45,10 +45,9 @@ def h5_loader(path):
     return rgb, depth
 
 iheight, iwidth = 480, 640 # raw image size
-oheight, owidth = 228, 304 # image size after pre-processing
 color_jitter = transforms.ColorJitter(0.4, 0.4, 0.4)
 
-def train_transform(rgb, depth):
+def train_transform(rgb, depth, oheight, owidth):
     s = np.random.uniform(1.0, 1.5) # random scaling
     # print("scale factor s={}".format(s))
     depth_np = depth / s
@@ -73,7 +72,7 @@ def train_transform(rgb, depth):
 
     return rgb_np, depth_np
 
-def val_transform(rgb, depth):
+def val_transform(rgb, depth, oheight, owidth):
     depth_np = depth
 
     # perform 1st part of data augmentation
@@ -96,7 +95,7 @@ to_tensor = transforms.ToTensor()
 class NYUDataset(data.Dataset):
     modality_names = ['rgb', 'rgbd', 'd'] # , 'g', 'gd'
 
-    def __init__(self, root, type, sparsifier=None, modality='rgb', loader=h5_loader):
+    def __init__(self, root, type, sparsifier=None, modality='rgb', loader=h5_loader, oheight=228, owidth=304):
         classes, class_to_idx = find_classes(root)
         imgs = make_dataset(root, class_to_idx)
         if len(imgs) == 0:
@@ -107,6 +106,8 @@ class NYUDataset(data.Dataset):
         self.imgs = imgs
         self.classes = classes
         self.class_to_idx = class_to_idx
+        self.oheight = oheight
+        self.owidth = owidth
         if type == 'train':
             self.transform = train_transform
         elif type == 'val':
@@ -160,7 +161,7 @@ class NYUDataset(data.Dataset):
         """
         rgb, depth = self.__getraw__(index)
         if self.transform is not None:
-            rgb_np, depth_np = self.transform(rgb, depth)
+            rgb_np, depth_np = self.transform(rgb, depth, self.oheight, self.owidth)
         else:
             raise(RuntimeError("transform not defined"))
 

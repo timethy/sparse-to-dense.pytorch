@@ -1,12 +1,9 @@
-import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models
 import collections
 import math
-
-oheight, owidth = 228, 304
 
 class Unpool(nn.Module):
     # Unpool: 2*2 unpooling with zero padding 
@@ -157,7 +154,9 @@ def choose_decoder(decoder, in_channels):
 
 
 class ResNet(nn.Module):
-    def __init__(self, layers, decoder, in_channels=3, out_channels=1, pretrained=True):
+    def __init__(self, layers, decoder, oheight, owidth, in_channels=3, out_channels=1, pretrained=True):
+        self.oheight = oheight
+        self.owidth = owidth
 
         if layers not in [18, 34, 50, 101, 152]:
             raise RuntimeError('Only 18, 34, 50, 101, and 152 layer model are defined for ResNet. Got {}'.format(layers))

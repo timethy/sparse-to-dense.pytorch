@@ -40,7 +40,7 @@ def merge_into_row_with_gt_and_err(input, depth_input, depth_target, depth_pred)
     depth_target_col = colored_depthmap(depth_target_cpu, d_min, d_max)
     depth_pred_col = colored_depthmap(depth_pred_cpu, d_min, d_max)
 
-    depth_err = depth_pred_cpu - depth_target_cpu
+    depth_err = np.abs(depth_pred_cpu - depth_target_cpu)
     # Color the error individually
     depth_err_col = colored_depthmap(depth_err)
 

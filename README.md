@@ -103,6 +103,13 @@ The following numbers are from the original Torch repo.
 
 	Note: our networks are trained on the KITTI odometry dataset, using only sparse labels from laser measurements.
 
+- Error metrics on SceneNet:
+	| RGB     |  rms  |  rel  | delta1 | delta2 | delta3 |
+	|-----------------------------|:-----:|:-----:|:-----:|:-----:|:-----:|
+	| Ours-200| **0.236** | **0.052** | **96.8** | **98.81** | **99.40** |
+	| Ours-500| **0.217** | **0.049** | **97.3** | **98.96** | **99.47** |
+
+
 ## Citation 
 If you use our code or method in your work, please cite:
 
