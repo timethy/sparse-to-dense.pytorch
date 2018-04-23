@@ -28,7 +28,7 @@ def merge_into_row(input, depth_target, depth_pred):
     return img_merge
 
 
-def merge_into_row_with_gt(input, depth_input, depth_target, depth_pred):
+def merge_into_row_with_gt_and_err(input, depth_input, depth_target, depth_pred):
     rgb = 255 * np.transpose(np.squeeze(input.cpu().numpy()), (1,2,0)) # H, W, C
     depth_input_cpu = np.squeeze(depth_input.cpu().numpy())
     depth_target_cpu = np.squeeze(depth_target.cpu().numpy())
@@ -40,7 +40,11 @@ def merge_into_row_with_gt(input, depth_input, depth_target, depth_pred):
     depth_target_col = colored_depthmap(depth_target_cpu, d_min, d_max)
     depth_pred_col = colored_depthmap(depth_pred_cpu, d_min, d_max)
 
-    img_merge = np.hstack([rgb, depth_input_col, depth_target_col, depth_pred_col])
+    depth_err = depth_pred_cpu - depth_target_cpu
+    # Color the error individually
+    depth_err_col = colored_depthmap(depth_err)
+
+    img_merge = np.hstack([rgb, depth_input_col, depth_target_col, depth_pred_col, depth_err_col])
 
     return img_merge
 

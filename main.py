@@ -91,7 +91,7 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                     default=True, help='use ImageNet pre-trained weights (default: True)')
 parser.add_argument('--use-input', dest='use_input', action='store_true',
-                    default=True, help='use depthmap input to overwrite output (default: True)')
+                    default=False, help='use depthmap input to overwrite output (default: False)')
 
 fieldnames = ['mse', 'rmse', 'absrel', 'lg10', 'mae', 
                 'delta1', 'delta2', 'delta3', 
@@ -120,6 +120,8 @@ def main():
     output_directory = os.path.join('results',
         '{}.sparsifier={}.modality={}.arch={}.decoder={}.criterion={}.lr={}.bs={}'.
                                     format(args.data, sparsifier, args.modality, args.arch, args.decoder, args.criterion, args.lr, args.batch_size))
+    if args.use_input:
+        output_directory += ".ui"
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
     train_csv = os.path.join(output_directory, 'train.csv')
@@ -351,12 +353,12 @@ def validate(val_loader, model, epoch, write_to_file=True):
 
             if i == 0:
                 if args.modality == 'rgbd':
-                    img_merge = utils.merge_into_row_with_gt(rgb, depth, target, depth_pred)
+                    img_merge = utils.merge_into_row_with_gt_and_err(rgb, depth, target, depth_pred)
                 else:
                     img_merge = utils.merge_into_row(rgb, target, depth_pred)
             elif (i < 8*skip) and (i % skip == 0):
                 if args.modality == 'rgbd':
-                    row = utils.merge_into_row_with_gt(rgb, depth, target, depth_pred)
+                    row = utils.merge_into_row_with_gt_and_err(rgb, depth, target, depth_pred)
                 else:
                     row = utils.merge_into_row(rgb, target, depth_pred)
                 img_merge = utils.add_row(img_merge, row)
