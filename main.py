@@ -5,6 +5,7 @@ import time
 import csv
 
 import torch
+import torch.nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim
@@ -226,7 +227,9 @@ def main():
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
 
-    # model = torch.nn.DataParallel(model).cuda()
+    if torch.cuda.device_count() > 1:
+        print("=> Using", torch.cuda.device_count(), "GPUs!")
+        model = torch.nn.DataParallel(model)
     model = model.cuda()
     print(model)
     print("=> model transferred to GPU.")
@@ -268,7 +271,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
     end = time.time()
     for i, (input, target) in enumerate(train_loader):
-
         input, target = input.cuda(), target.cuda()
         input_var = torch.autograd.Variable(input)
         target_var = torch.autograd.Variable(target)
