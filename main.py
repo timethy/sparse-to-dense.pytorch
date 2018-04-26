@@ -91,6 +91,8 @@ parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                     default=True, help='use ImageNet pre-trained weights (default: True)')
 parser.add_argument('--use-input', dest='use_input', action='store_true',
                     default=False, help='use depthmap input to overwrite output (default: False)')
+parser.add_argument('--no-upsample', dest='no_upsample', action='store_true',
+                    default=False, help='do not do final upsample step (default: False)')
 parser.add_argument('--width', type=int, metavar='W',
                     default=304, help='The width of the input layer of the network (default: 304)')
 parser.add_argument('--height', type=int, metavar='H',
@@ -348,7 +350,11 @@ def validate(val_loader, model, epoch, write_to_file=True):
         # measure accuracy and record loss
         result = Result()
         output1 = torch.index_select(depth_pred.data, 1, torch.cuda.LongTensor([0]))
-        result.evaluate(output1, target)
+        try:
+            result.evaluate(output1, target)
+        except RuntimeError:
+            print("Runtime error occured @", i)
+            return
         average_meter.update(result, gpu_time, data_time, input.size(0))
         end = time.time()
 

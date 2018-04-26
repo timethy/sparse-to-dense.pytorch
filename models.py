@@ -157,6 +157,7 @@ class ResNet(nn.Module):
     def __init__(self, layers, decoder, oheight, owidth, in_channels=3, out_channels=1, pretrained=True, upsample=True):
         self.oheight = oheight
         self.owidth = owidth
+        self.upsample = upsample
 
         if layers not in [18, 34, 50, 101, 152]:
             raise RuntimeError('Only 18, 34, 50, 101, and 152 layer model are defined for ResNet. Got {}'.format(layers))
@@ -220,6 +221,7 @@ class ResNet(nn.Module):
         # decoder
         x = self.decoder(x)
         x = self.conv3(x)
-        x = self.bilinear(x)
+        if self.upsample:
+            x = self.bilinear(x)
 
         return x
