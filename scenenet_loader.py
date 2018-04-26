@@ -12,6 +12,9 @@ import transforms
 to_tensor = transforms.ToTensor()
 
 
+ms_per_frame = 25
+
+
 def load_depth_map_in_m(file_name):
     image = Image.open(file_name)
     pixel = np.array(image)
@@ -20,9 +23,9 @@ def load_depth_map_in_m(file_name):
 
 def load_trajectory_image(path, i):
     # subdirectories photo, depth, instance:
-    image = Image.open(os.path.join(path, "photo", "%d.jpg" % (i*25)))
+    image = Image.open(os.path.join(path, "photo", "%d.jpg" % (i*ms_per_frame)))
     rgb = np.array(image)
-    depth = load_depth_map_in_m(os.path.join(path, "depth", "%d.png" % (i*25)))
+    depth = load_depth_map_in_m(os.path.join(path, "depth", "%d.png" % (i*ms_per_frame)))
     return rgb, depth
 
 
@@ -38,19 +41,15 @@ def find_trajectories(dir):
     return trajectories
 
 
-# Walks a directory and finds all folder called depth
-# Each trajectory has 300 images
-# Load the images at given indices only
-def make_dataset(dir, trajectory_to_idx):
-    subdirs = [os.path.join(dir, d) for d in os.listdir(dir) if os.path.isdir(os.path.join(dir, d))]
-    trajectories = []
-    for dir in subdirs:
-        # This level is named as the scene-id
-        for d in sorted(os.listdir(dir)):
-            path = os.path.join(dir, d)
-            trajectories.append((path, trajectory_to_idx[d]))
+def filter_scenenet(trajectories, trajectory_indices):
+    paths_and_frames = []
+    for path in trajectories:
+        for i in trajectory_indices:
+            depth = load_depth_map_in_m(os.path.join(path, "depth", "%d.png" % (i*ms_per_frame)))
+            if not np.all(depth == 0.0):
+                paths_and_frames.append((path, i))
 
-    return trajectories
+    return paths_and_frames
 
 
 def train_transform(oheight, owidth):
@@ -60,7 +59,7 @@ def train_transform(oheight, owidth):
         transforms.CenterCrop((oheight, owidth)),
         transforms.HorizontalFlip(do_flip)]
 
-    return transforms.Compose(ts), transforms.Compose(ts + [transforms.ColorJitter(0.4, 0.4, 0.4, 0.4)])
+    return transforms.Compose(ts), transforms.Compose(ts + [transforms.ColorJitter(0.4, 0.4, 0.4)])
 
 
 def val_transform(oheight, owidth):
@@ -75,10 +74,8 @@ class ScenenetDataset(data.Dataset):
 
     def __init__(self, root, type, trajectory_indices, oheight, owidth,
                  sparsifier=None, modality='rgb', loader=load_trajectory_image):
-        self.trajectories = find_trajectories(root)
-        print("Found %d trajectories" % len(self.trajectories))
-        # Load all of the images in trajectory for now
-        self.trajectory_indices = trajectory_indices
+        trajectories = find_trajectories(root)
+        print("Found %d trajectories" % len(trajectories))
         self.oheight = oheight
         self.owidth = owidth
         self.transform = train_transform if type == 'train' else val_transform
@@ -96,6 +93,11 @@ class ScenenetDataset(data.Dataset):
         else:
             raise (RuntimeError("Invalid modality type: " + modality + "\n"
                                 "Supported dataset types are: " + ''.join(self.modality_names)))
+
+        # Filter out frames with empty depthmaps:
+        print("Find all indexed paths and frames")
+        self.indexed_paths_and_frames = filter_scenenet(trajectories, trajectory_indices)
+        print("Found %d indexed paths and frames" % len(self.indexed_paths_and_frames))
 
     def create_sparse_depth(self, rgb, depth):
         if self.sparsifier is None:
@@ -119,9 +121,10 @@ class ScenenetDataset(data.Dataset):
         Returns:
             tuple: (rgb, depth) the raw data.
         """
-        n_per_trajectory = len(self.trajectory_indices)
-        path = self.trajectories[int(index / n_per_trajectory)]
-        rgb, depth = self.loader(path, index % n_per_trajectory)
+        path, i = self.indexed_paths_and_frames[index]
+        rgb, depth = self.loader(path, i)
+        if np.all(depth == 0.0):
+            raise(RuntimeError("Empty depth map @ %s" % path))
         return rgb, depth
 
     def __get_all_item__(self, index):
@@ -175,4 +178,4 @@ class ScenenetDataset(data.Dataset):
         return input_tensor, depth_tensor
 
     def __len__(self):
-        return len(self.trajectories) * len(self.trajectory_indices)
+        return len(self.indexed_paths_and_frames)
