@@ -15,17 +15,16 @@ to_tensor = transforms.ToTensor()
 ms_per_frame = 25
 
 
-def load_depth_map_in_m(file_name):
+def load_depth_map_in_mm(file_name):
     image = Image.open(file_name)
-    pixel = np.array(image)
-    return pixel * 0.001
+    return np.array(image)
 
 
 def load_trajectory_image(path, i):
     # subdirectories photo, depth, instance:
     image = Image.open(os.path.join(path, "photo", "%d.jpg" % (i*ms_per_frame)))
     rgb = np.array(image)
-    depth = load_depth_map_in_m(os.path.join(path, "depth", "%d.png" % (i*ms_per_frame)))
+    depth = load_depth_map_in_mm(os.path.join(path, "depth", "%d.png" % (i * ms_per_frame))) * 0.001
     return rgb, depth
 
 
@@ -37,7 +36,7 @@ def find_trajectories(dir):
     for dir in subdirs:
         for d in sorted(os.listdir(dir)):
             trajectories.append(os.path.join(dir, d))
-    trajectories.sort()
+    #trajectories.sort()
     return trajectories
 
 
@@ -45,9 +44,11 @@ def filter_scenenet(trajectories, trajectory_indices):
     paths_and_frames = []
     for path in trajectories:
         for i in trajectory_indices:
-            depth = load_depth_map_in_m(os.path.join(path, "depth", "%d.png" % (i*ms_per_frame)))
-            if not np.all(depth == 0.0):
+            depth = load_depth_map_in_mm(os.path.join(path, "depth", "%d.png" % (i * ms_per_frame)))
+            if np.any(depth):
                 paths_and_frames.append((path, i))
+
+    print("Found %d paths_and_frames" % len(paths_and_frames))
 
     return paths_and_frames
 
