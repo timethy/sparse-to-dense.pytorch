@@ -1,13 +1,30 @@
+import argparse
+import os
 import shutil
 
-import argparse
+import numpy as np
 
-from scenenet_loader import *
+from scenenet_loader import find_trajectories, ms_per_frame, load_depth_map_in_mm
 from joblib import Parallel, delayed
+
 
 parser = argparse.ArgumentParser(description='')
 parser.add_argument('traj_dir')
 parser.add_argument('to_dir')
+
+
+def filter_scenenet(trajectories, trajectory_indices):
+    paths_and_frames = []
+    for path in trajectories:
+        for i in trajectory_indices:
+            depth = load_depth_map_in_mm(os.path.join(path, "depth", "%d.png" % (i * ms_per_frame)))
+            if np.any(depth):
+                paths_and_frames.append((path, i))
+
+    print("Found %d paths_and_frames" % len(paths_and_frames))
+
+    return paths_and_frames
+
 
 if __name__ == "__main__":
     args = parser.parse_args()

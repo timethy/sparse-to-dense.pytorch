@@ -36,19 +36,16 @@ def find_trajectories(dir):
     for dir in subdirs:
         for d in sorted(os.listdir(dir)):
             trajectories.append(os.path.join(dir, d))
-    #trajectories.sort()
     return trajectories
 
 
-def filter_scenenet(trajectories, trajectory_indices):
+def find_paths_and_frames(trajectories, trajectory_indices):
     paths_and_frames = []
     for path in trajectories:
         for i in trajectory_indices:
-            depth = load_depth_map_in_mm(os.path.join(path, "depth", "%d.png" % (i * ms_per_frame)))
-            if np.any(depth):
+            if os.path.isfile(os.path.join(path, "photo", "%d.jpg" % (i*ms_per_frame))) and \
+                    os.path.isfile(os.path.join(path, "depth", "%d.png" % (i*ms_per_frame))):
                 paths_and_frames.append((path, i))
-
-    print("Found %d paths_and_frames" % len(paths_and_frames))
 
     return paths_and_frames
 
@@ -97,7 +94,7 @@ class ScenenetDataset(data.Dataset):
 
         # Filter out frames with empty depthmaps:
         print("Find all indexed paths and frames")
-        self.indexed_paths_and_frames = filter_scenenet(trajectories, trajectory_indices)
+        self.indexed_paths_and_frames = find_paths_and_frames(trajectories, trajectory_indices)
         print("Found %d indexed paths and frames" % len(self.indexed_paths_and_frames))
 
     def create_sparse_depth(self, rgb, depth):

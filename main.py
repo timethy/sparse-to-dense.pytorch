@@ -187,6 +187,7 @@ def main():
             print("=> loaded best model (epoch {})".format(checkpoint['epoch']))
         else:
             print("=> no best model found at '{}'".format(best_model_filename))
+            return
         validate(val_loader, model, checkpoint['epoch'], write_to_file=False)
         return
 
