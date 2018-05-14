@@ -23,7 +23,7 @@ import utils
 
 model_names = ['resnet18', 'resnet50']
 loss_names = ['l1', 'l2']
-data_names = ['nyudepthv2', "scenenet"]
+data_names = ['nyudepthv2', "scenenet", "scenenet-24"]
 sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo]]
 decoder_names = Decoder.names
 modality_names = NYUDataset.modality_names
@@ -150,7 +150,7 @@ def main():
                                    modality=args.modality, sparsifier=sparsifier, oheight=args.oheight, owidth=args.owidth)
         val_dataset = NYUDataset(valdir, type='val',
                                  modality=args.modality, sparsifier=sparsifier, oheight=args.oheight, owidth=args.owidth)
-    elif args.data == "scenenet":
+    elif args.data in ["scenenet", "scenenet-24"]:
         train_indices = range(0, 300, 13)  # total of 24 per trajectory
         val_indices = range(0, 300, 26)  # total of 12 per trajectory
         train_dataset = ScenenetDataset(traindir, type='train',
