@@ -6,7 +6,7 @@ import os.path
 import numpy as np
 import torch.utils.data as data
 from PIL import Image
-import transforms
+from sparse_to_dense import transforms
 
 
 to_tensor = transforms.ToTensor()

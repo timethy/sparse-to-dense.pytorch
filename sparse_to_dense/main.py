@@ -13,13 +13,13 @@ import torch.utils.data
 
 import numpy as np
 
-from nyu_dataloader import NYUDataset
-from scenenet_loader import ScenenetDataset
-from models import Decoder, ResNet
-from metrics import AverageMeter, Result
-from dense_to_sparse import UniformSampling, SimulatedStereo
-import criteria
-import utils
+from sparse_to_dense.nyu_dataloader import NYUDataset
+from sparse_to_dense.scenenet_loader import ScenenetDataset
+from sparse_to_dense.models import Decoder, ResNet
+from sparse_to_dense.metrics import AverageMeter, Result
+from sparse_to_dense.dense_to_sparse import UniformSampling, SimulatedStereo
+from sparse_to_dense import criteria
+from sparse_to_dense import utils
 
 model_names = ['resnet18', 'resnet50']
 loss_names = ['l1', 'l2']

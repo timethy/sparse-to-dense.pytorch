@@ -3,7 +3,7 @@ import os.path
 import numpy as np
 import torch.utils.data as data
 import h5py
-import transforms
+from sparse_to_dense import transforms
 
 IMG_EXTENSIONS = [
     '.h5',
