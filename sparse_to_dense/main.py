@@ -146,17 +146,19 @@ def main():
     valdir = os.path.join('data', args.data, 'val')
 
     if args.data in ["nyudepthv2", "small-world-2"]:
-        train_dataset = NYUDataset(traindir, type='train',
-                                   modality=args.modality, sparsifier=sparsifier, oheight=args.oheight, owidth=args.owidth)
+        if not args.evaluate:
+            train_dataset = NYUDataset(traindir, type='train',
+                                       modality=args.modality, sparsifier=sparsifier, oheight=args.oheight, owidth=args.owidth)
         val_dataset = NYUDataset(valdir, type='val',
                                  modality=args.modality, sparsifier=sparsifier, oheight=args.oheight, owidth=args.owidth)
     elif args.data in ["scenenet", "scenenet-24"]:
         train_indices = range(0, 300, 13)  # total of 24 per trajectory
         val_indices = range(0, 300, 26)  # total of 12 per trajectory
-        train_dataset = ScenenetDataset(traindir, type='train',
-                                        modality=args.modality, sparsifier=sparsifier,
-                                        trajectory_indices=train_indices,
-                                        oheight=args.height, owidth=args.width)
+        if not args.evaluate:
+            train_dataset = ScenenetDataset(traindir, type='train',
+                                            modality=args.modality, sparsifier=sparsifier,
+                                            trajectory_indices=train_indices,
+                                            oheight=args.height, owidth=args.width)
         val_dataset = ScenenetDataset(valdir, type='val',
                                       modality=args.modality, sparsifier=sparsifier,
                                       trajectory_indices=val_indices,
@@ -165,9 +167,10 @@ def main():
         print("Wrong dataset, must be one of: " + ' | '.join(data_names) + ' (default: nyudepthv2)')
         return
 
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True,
-        num_workers=args.workers, pin_memory=True, sampler=None)
+    if not args.evaluate:
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=args.batch_size, shuffle=True,
+            num_workers=args.workers, pin_memory=True, sampler=None)
 
     # set batch size to be 1 for validation
     val_loader = torch.utils.data.DataLoader(val_dataset,
