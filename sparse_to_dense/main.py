@@ -148,9 +148,9 @@ def main():
     if args.data in ["nyudepthv2", "small-world-2"]:
         if not args.evaluate:
             train_dataset = NYUDataset(traindir, type='train',
-                                       modality=args.modality, sparsifier=sparsifier, oheight=args.oheight, owidth=args.owidth)
+                                       modality=args.modality, sparsifier=sparsifier, oheight=args.height, owidth=args.width)
         val_dataset = NYUDataset(valdir, type='val',
-                                 modality=args.modality, sparsifier=sparsifier, oheight=args.oheight, owidth=args.owidth)
+                                 modality=args.modality, sparsifier=sparsifier, oheight=args.height, owidth=args.width)
     elif args.data in ["scenenet", "scenenet-24"]:
         train_indices = range(0, 300, 13)  # total of 24 per trajectory
         val_indices = range(0, 300, 26)  # total of 12 per trajectory
