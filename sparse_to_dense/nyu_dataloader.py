@@ -56,9 +56,9 @@ def train_transform(rgb, depth, oheight, owidth):
 
     # perform 1st part of data augmentation
     transform = transforms.Compose([
-        transforms.Resize(250.0 / iheight), # this is for computational efficiency, since rotation is very slow
-        transforms.Rotate(angle),
-        transforms.Resize(s),
+        transforms.Resize(240.0 / iheight * s), # this is for computational efficiency, since rotation is very slow
+#        transforms.Rotate(angle),
+#        transforms.Resize(s),
         transforms.CenterCrop((oheight, owidth)),
         transforms.HorizontalFlip(do_flip)
     ])
