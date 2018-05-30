@@ -39,7 +39,7 @@ def make_dataset(dir, class_to_idx):
 def h5_loader(path):
     h5f = h5py.File(path, "r")
     rgb = np.array(h5f['rgb'])
-    rgb = np.transpose(rgb, (1, 2, 0))
+#    rgb = np.transpose(rgb, (1, 2, 0))
     depth = np.array(h5f['depth'])
 
     return rgb, depth
