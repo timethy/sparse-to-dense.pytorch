@@ -23,7 +23,7 @@ from sparse_to_dense import utils
 
 model_names = ['resnet18', 'resnet50']
 loss_names = ['l1', 'l2']
-data_names = ['nyudepthv2', "scenenet", "scenenet-24", "small-world-2", "small-world-3"]
+data_names = ['nyudepthv2', "scenenet", "scenenet-24", "small-world-4"]
 sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo]]
 decoder_names = Decoder.names
 modality_names = NYUDataset.modality_names
@@ -145,7 +145,7 @@ def main():
     traindir = os.path.join('data', args.data, 'train')
     valdir = os.path.join('data', args.data, 'val')
 
-    if args.data in ["nyudepthv2", "small-world-2", "small-world-3"]:
+    if args.data in ["nyudepthv2", "small-world-4"]:
         if not args.evaluate:
             train_dataset = NYUDataset(traindir, type='train',
                                        modality=args.modality, sparsifier=sparsifier, oheight=args.height, owidth=args.width)
