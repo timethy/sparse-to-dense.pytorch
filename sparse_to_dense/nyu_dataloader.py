@@ -39,7 +39,8 @@ def make_dataset(dir, class_to_idx):
 def h5_loader(path):
     h5f = h5py.File(path, "r")
     rgb = np.array(h5f['rgb'])
-#    rgb = np.transpose(rgb, (1, 2, 0))
+    # I know this is terrible, but for NYU override (comment out for small-world), cf line 66
+    rgb = np.transpose(rgb, (1, 2, 0))
     depth = np.array(h5f['depth'])
 
     return rgb, depth
@@ -56,12 +57,21 @@ def train_transform(rgb, depth, oheight, owidth):
 
     # perform 1st part of data augmentation
     transform = transforms.Compose([
-        transforms.Resize(240.0 / iheight * s), # this is for computational efficiency, since rotation is very slow
-#        transforms.Rotate(angle),
-#        transforms.Resize(s),
+        transforms.Resize(240.0 / iheight * s),  # this is for computational efficiency, since rotation is very slow
+        transforms.Rotate(angle),
+        transforms.Resize(s),
         transforms.CenterCrop((oheight, owidth)),
         transforms.HorizontalFlip(do_flip)
     ])
+    # I know this is terrible, but for NYU override (comment out for small-world)
+    transform = transforms.Compose([
+        transforms.Resize(260.0 / iheight * s),  # this is for computational efficiency, since rotation is very slow
+        transforms.Rotate(angle),
+        transforms.Resize(s),
+        transforms.CenterCrop((oheight, owidth)),
+        transforms.HorizontalFlip(do_flip)
+    ])
+
     rgb_np = transform(rgb)
 
     # random color jittering 
