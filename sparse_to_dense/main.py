@@ -178,6 +178,13 @@ def main():
 
     print("=> data loaders created.")
 
+    # Load last best if exists
+    if not args.resume:
+        model_best_filename = os.path.join(output_directory, 'model_best.pth.tar')
+        if os.path.exists(model_best_filename):
+            print("=> Continuing from previous model_best")
+            args.resume = model_best_filename
+
     # evaluation mode
     if args.evaluate:
         best_model_filename = os.path.join(output_directory, 'model_best.pth.tar')
