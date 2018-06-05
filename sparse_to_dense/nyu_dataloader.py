@@ -84,15 +84,21 @@ def train_transform(is_small_world, rgb, depth, oheight, owidth):
 
     return rgb_np, depth_np
 
-def val_transform(rgb, depth, oheight, owidth):
+def val_transform(is_small_world, rgb, depth, oheight, owidth):
     depth_np = depth
 
     # perform 1st part of data augmentation
-    transform = transforms.Compose([
-        transforms.CenterCrop((304*2, 228*2)),
-        transforms.Resize(oheight / iheight),
-        transforms.CenterCrop((oheight, owidth)),
-    ])
+    if is_small_world:
+        transform = transforms.Compose([
+            transforms.Resize(oheight / iheight),
+            transforms.CenterCrop((oheight, owidth))
+        ])
+    else:
+        transform = transforms.Compose([
+            transforms.CenterCrop((304*2, 228*2)),
+            transforms.Resize(oheight / iheight),
+            transforms.CenterCrop((oheight, owidth)),
+        ])
     rgb_np = transform(rgb)
     rgb_np = np.asfarray(rgb_np, dtype='float') / 255
     depth_np = transform(depth_np)
