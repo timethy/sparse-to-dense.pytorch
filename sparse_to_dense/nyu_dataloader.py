@@ -40,7 +40,7 @@ def h5_loader(path):
     h5f = h5py.File(path, "r")
     rgb = np.array(h5f['rgb'])
     # Transform C, H, W to H, W, C.
-    if rgb.size(0) == 3:
+    if np.size(rgb, 0) == 3:
         rgb = np.transpose(rgb, (1, 2, 0))
     depth = np.array(h5f['depth'])
 
