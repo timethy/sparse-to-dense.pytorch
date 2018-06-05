@@ -81,7 +81,7 @@ class SimulatedStereo(DenseToSparse):
 
         mag = cv2.magnitude(gx, gy)
         if np.count_nonzero(depth_mask) > 0:
-            min_mag = np.percentile(mag[depth_mask], 100 * (1.0 - edge_fraction))
+            min_mag = np.percentile(mag[depth_mask], np.rint(100 * (1.0 - edge_fraction)))
             mag_mask = mag >= min_mag
 
             if self.dilate_iterations >= 0:

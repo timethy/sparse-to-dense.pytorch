@@ -66,8 +66,8 @@ def train_transform(is_small_world, rgb, depth, oheight, owidth):
     else:
         transform = transforms.Compose([
             # Crop so we don't have white frame in rgb image
-            transforms.CenterCrop((304*2, 228*2)),
-            transforms.Resize(250.0 / iheight),  # this is for computational efficiency, since rotation is very slow
+            transforms.CenterCrop((228*2, 304*2)),
+            transforms.Resize(250.0 / (228*2)),  # this is for computational efficiency, since rotation is very slow
             transforms.Rotate(angle),
             transforms.Resize(s),
             transforms.CenterCrop((oheight, owidth)),
@@ -95,8 +95,8 @@ def val_transform(is_small_world, rgb, depth, oheight, owidth):
         ])
     else:
         transform = transforms.Compose([
-            transforms.CenterCrop((304*2, 228*2)),
-            transforms.Resize(oheight / iheight),
+            transforms.CenterCrop((228*2, 304*2)),
+            transforms.Resize(oheight / (228*2)),
             transforms.CenterCrop((oheight, owidth)),
         ])
     rgb_np = transform(rgb)
