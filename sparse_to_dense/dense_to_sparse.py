@@ -50,7 +50,7 @@ class UniformSampling(DenseToSparse):
 class SimulatedStereo(DenseToSparse):
     name = "sim_stereo"
 
-    def __init__(self, num_samples, max_depth=np.inf, dilate_kernel=3, dilate_iterations=1):
+    def __init__(self, num_samples, max_depth=np.inf, dilate_kernel=0, dilate_iterations=0):
         DenseToSparse.__init__(self)
         self.num_samples = num_samples
         self.max_depth = max_depth

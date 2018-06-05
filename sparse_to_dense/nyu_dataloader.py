@@ -49,15 +49,15 @@ iheight, iwidth = 480, 640 # raw image size
 color_jitter = transforms.ColorJitter(0.4, 0.4, 0.4)
 
 def train_transform(rgb, depth, oheight, owidth):
-    s = np.random.uniform(1.0, 1.5) # random scaling
+    s = np.random.uniform(1.0, 1.5)  # random scaling
     # print("scale factor s={}".format(s))
     depth_np = depth / s
     angle = np.random.uniform(-5.0, 5.0) # random rotation degrees
-    do_flip = np.random.uniform(0.0, 1.0) < 0.5 # random horizontal flip
+    do_flip = np.random.uniform(0.0, 1.0) < 0.5  # random horizontal flip
 
     # perform 1st part of data augmentation
     transform = transforms.Compose([
-        transforms.Resize(240.0 / iheight * s),  # this is for computational efficiency, since rotation is very slow
+        transforms.Resize(250.0 / iheight),  # this is for computational efficiency, since rotation is very slow
         transforms.Rotate(angle),
         transforms.Resize(s),
         transforms.CenterCrop((oheight, owidth)),
@@ -65,9 +65,7 @@ def train_transform(rgb, depth, oheight, owidth):
     ])
     # I know this is terrible, but for NYU override (comment out for small-world)
     transform = transforms.Compose([
-        transforms.Resize(260.0 / iheight * s),  # this is for computational efficiency, since rotation is very slow
-        transforms.Rotate(angle),
-        transforms.Resize(s),
+        transforms.Resize(oheight / iheight * s),  # this is for computational efficiency, since rotation is very slow
         transforms.CenterCrop((oheight, owidth)),
         transforms.HorizontalFlip(do_flip)
     ])
