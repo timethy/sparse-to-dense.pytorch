@@ -70,13 +70,14 @@ class SimulatedStereo(DenseToSparse):
     # Dilatate
     def dense_to_sparse(self, rgb, depth):
         gray = rgb2grayscale(rgb)
+
+        depth_mask = np.bitwise_and(depth != 0.0, depth <= self.max_depth)
+
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
         gx = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=5)
         gy = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=5)
 
-        depth_mask = np.bitwise_and(depth != 0.0, depth <= self.max_depth)
-
-        edge_fraction = float(self.num_samples) / np.size(depth)
+        edge_fraction = float(self.num_samples) / np.sum(depth_mask)
 
         mag = cv2.magnitude(gx, gy)
         if np.count_nonzero(depth_mask) > 0:
