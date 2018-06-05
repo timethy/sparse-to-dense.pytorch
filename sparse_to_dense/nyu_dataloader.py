@@ -39,8 +39,9 @@ def make_dataset(dir, class_to_idx):
 def h5_loader(path):
     h5f = h5py.File(path, "r")
     rgb = np.array(h5f['rgb'])
-    # I know this is terrible, but for NYU override (comment out for small-world), cf line 66
-    rgb = np.transpose(rgb, (1, 2, 0))
+    # Transform C, H, W to H, W, C.
+    if rgb.size(0) == 3:
+        rgb = np.transpose(rgb, (1, 2, 0))
     depth = np.array(h5f['depth'])
 
     return rgb, depth
@@ -48,7 +49,7 @@ def h5_loader(path):
 iheight, iwidth = 480, 640 # raw image size
 color_jitter = transforms.ColorJitter(0.4, 0.4, 0.4)
 
-def train_transform(rgb, depth, oheight, owidth):
+def train_transform(is_small_world, rgb, depth, oheight, owidth):
     s = np.random.uniform(1.0, 1.5)  # random scaling
     # print("scale factor s={}".format(s))
     depth_np = depth / s
@@ -56,19 +57,22 @@ def train_transform(rgb, depth, oheight, owidth):
     do_flip = np.random.uniform(0.0, 1.0) < 0.5  # random horizontal flip
 
     # perform 1st part of data augmentation
-    transform = transforms.Compose([
-        transforms.Resize(250.0 / iheight),  # this is for computational efficiency, since rotation is very slow
-        transforms.Rotate(angle),
-        transforms.Resize(s),
-        transforms.CenterCrop((oheight, owidth)),
-        transforms.HorizontalFlip(do_flip)
-    ])
-    # I know this is terrible, but for NYU override (comment out for small-world)
-    transform = transforms.Compose([
-        transforms.Resize(oheight / iheight * s),  # this is for computational efficiency, since rotation is very slow
-        transforms.CenterCrop((oheight, owidth)),
-        transforms.HorizontalFlip(do_flip)
-    ])
+    if is_small_world:
+        transform = transforms.Compose([
+            transforms.Resize(oheight / iheight * s),  # this is for computational efficiency, since rotation is very slow
+            transforms.CenterCrop((oheight, owidth)),
+            transforms.HorizontalFlip(do_flip)
+        ])
+    else:
+        transform = transforms.Compose([
+            # Crop so we don't have white frame in rgb image
+            transforms.CenterCrop((304*2, 228*2)),
+            transforms.Resize(250.0 / iheight),  # this is for computational efficiency, since rotation is very slow
+            transforms.Rotate(angle),
+            transforms.Resize(s),
+            transforms.CenterCrop((oheight, owidth)),
+            transforms.HorizontalFlip(do_flip)
+        ])
 
     rgb_np = transform(rgb)
 
@@ -85,7 +89,8 @@ def val_transform(rgb, depth, oheight, owidth):
 
     # perform 1st part of data augmentation
     transform = transforms.Compose([
-        transforms.Resize(240.0 / iheight),
+        transforms.CenterCrop((304*2, 228*2)),
+        transforms.Resize(oheight / iheight),
         transforms.CenterCrop((oheight, owidth)),
     ])
     rgb_np = transform(rgb)
@@ -169,7 +174,10 @@ class NYUDataset(data.Dataset):
         """
         rgb, depth = self.__getraw__(index)
         if self.transform is not None:
-            rgb_np, depth_np = self.transform(rgb, depth, self.oheight, self.owidth)
+            # This is hacky, and should be cleand up properly.
+            # But we have different transforms for different data-sets
+            is_small_world = "small-world" in self.root
+            rgb_np, depth_np = self.transform(is_small_world, rgb, depth, self.oheight, self.owidth)
         else:
             raise(RuntimeError("transform not defined"))
 
