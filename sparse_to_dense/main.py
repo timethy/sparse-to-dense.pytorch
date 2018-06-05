@@ -187,7 +187,7 @@ def main():
 
     # evaluation mode
     if args.evaluate:
-        best_model_filename = os.path.join(output_directory, 'model_best.pth.tar')
+        best_model_filename = args.resume or os.path.join(output_directory, 'model_best.pth.tar')
         if os.path.isfile(best_model_filename):
             print("=> loading best model '{}'".format(best_model_filename))
             checkpoint = torch.load(best_model_filename)
