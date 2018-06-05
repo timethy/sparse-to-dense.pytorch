@@ -77,7 +77,7 @@ class SimulatedStereo(DenseToSparse):
         gx = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=5)
         gy = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=5)
 
-        edge_fraction = float(self.num_samples) / np.sum(depth_mask)
+        edge_fraction = float(self.num_samples) / np.size(depth)
 
         mag = cv2.magnitude(gx, gy)
         if np.count_nonzero(depth_mask) > 0:
