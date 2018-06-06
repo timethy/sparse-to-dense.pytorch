@@ -12,7 +12,7 @@ def colored_depthmap(depth, d_min=None, d_max=None):
         d_max = np.max(depth)
     depth_relative = (depth - d_min) / (d_max - d_min)
     colored = 255 * cmap(depth_relative)[:, :, :3] # H, W, C
-    return colored
+    return np.uint8(colored)
 
 
 def merge_into_row(input, depth_target, depth_pred):
