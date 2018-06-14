@@ -42,8 +42,8 @@ def merge_into_row_with_gt_and_err(input, depth_input, depth_target, depth_pred)
     depth_pred_col = colored_depthmap(depth_pred_cpu, d_min, d_max)
 
     depth_err = np.abs(depth_pred_cpu - depth_target_cpu)
-    # mask out invalid depth input
-    depth_err[depth_input == 0.0] = 0.0
+    # mask out invalid depth to compare against
+    depth_err[depth_target_cpu == 0.0] = 0.0
     # Color the error individually
     depth_err_col = colored_depthmap(depth_err)
 

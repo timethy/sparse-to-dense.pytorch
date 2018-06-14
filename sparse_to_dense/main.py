@@ -4,6 +4,8 @@ import shutil
 import time
 import csv
 
+import h5py
+
 import torch
 import torch.nn
 import torch.nn.parallel
@@ -13,7 +15,7 @@ import torch.utils.data
 
 import numpy as np
 
-from sparse_to_dense.nyu_dataloader import NYUDataset
+from sparse_to_dense.nyu_dataloader import NYUDataset, val_transform, to_tensor
 from sparse_to_dense.scenenet_loader import ScenenetDataset
 from sparse_to_dense.models import Decoder, ResNet
 from sparse_to_dense.metrics import AverageMeter, Result
@@ -23,7 +25,8 @@ from sparse_to_dense import utils
 
 model_names = ['resnet18', 'resnet50']
 loss_names = ['l1', 'l2']
-data_names = ['nyudepthv2', "scenenet", "scenenet-24", "small-world-4"]
+# If u specify nyuraw, we run evaluation on it
+data_names = ['nyudepthv2', 'nyuraw', "scenenet", "scenenet-24", "small-world-4"]
 sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo]]
 decoder_names = Decoder.names
 modality_names = NYUDataset.modality_names
@@ -85,6 +88,9 @@ parser.add_argument('--print-freq', '-p', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
+# This is kinda hacked into here
+parser.add_argument('--evaluate-raw-kinect', dest='evaluate', action='store_true',
+                    help='evaluate model on raw kinect depth data')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                     help='evaluate model on validation set')
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
@@ -145,7 +151,21 @@ def main():
     traindir = os.path.join('data', args.data, 'train')
     valdir = os.path.join('data', args.data, 'val')
 
-    if args.data in ["nyudepthv2", "small-world-4"]:
+    if args.data == "nyuraw":
+        best_model_filename = args.resume or os.path.join(output_directory, 'model_best.pth.tar')
+        if os.path.isfile(best_model_filename):
+            print("=> loading best model '{}'".format(best_model_filename))
+            checkpoint = torch.load(best_model_filename)
+            args.start_epoch = checkpoint['epoch']
+            best_result = checkpoint['best_result']
+            model = checkpoint['model']
+            print("=> loaded best model (epoch {})".format(checkpoint['epoch']))
+        else:
+            print("=> no best model found at '{}'".format(best_model_filename))
+            return
+        validate_on_raw('nyu_depth_v2_labeled.mat', model, checkpoint['epoch'], write_to_file=False)
+        return
+    elif args.data in ["nyudepthv2", "small-world-4"]:
         if not args.evaluate:
             train_dataset = NYUDataset(traindir, type='train',
                                        modality=args.modality, sparsifier=sparsifier, oheight=args.height, owidth=args.width)
@@ -333,6 +353,146 @@ def train(train_loader, model, criterion, optimizer, epoch):
             'mae': avg.mae, 'delta1': avg.delta1, 'delta2': avg.delta2, 'delta3': avg.delta3, 
             'gpu_time': avg.gpu_time, 'data_time': avg.data_time})
 
+
+def validate_on_raw(file, model, epoch, write_to_file=True):
+    average_meter = AverageMeter()
+
+    nyu = h5py.File(file, "r")
+
+    depths = nyu["depths"]
+    depths_raw = nyu["rawDepths"]
+    rgbs = nyu["images"]
+
+    # switch to evaluate mode
+    model.eval()
+
+    end = time.time()
+    for i in range(np.size(depths, 0)):
+        rgb = np.transpose(rgbs[i, :, :, :], (2, 1, 0))
+        depth = np.transpose(depths[i, :, :])
+        depth_raw = np.transpose(depths_raw[i, :, :])
+
+        print(np.count_nonzero(np.isinf(depth)))
+        print(np.count_nonzero(np.isinf(depth_raw)))
+        print(np.count_nonzero(depth_raw < 0.0))
+        print(np.count_nonzero(depth_raw == 0.0))
+
+        #print(depth)
+        #print(depth_raw)
+        #print(np.shape(depth))
+        #print(np.shape(depth_raw))
+
+        rgb_np, depth_np = val_transform(False, rgb, depth, oheight=args.height, owidth=args.width)
+        rgb_np, depth_raw_np = val_transform(False, rgb, depth_raw, oheight=args.height, owidth=args.width)
+
+        #print(np.shape(rgb_np))
+        #print(np.shape(depth_np))
+        #print(np.shape(depth_raw_np))
+        print("after transformation")
+        print(np.count_nonzero(depth_raw_np == 0.0))
+
+        #print(rgb_np)
+
+        # Treat input as batch with size 1
+        rgbd = np.append(rgb_np, np.expand_dims(depth_raw_np, axis=2), axis=2)
+        # This should switch H x W x C to C x H x W, where C = 4 (depth)
+
+        # Unqueeze for batch size 1
+        input = to_tensor(rgbd)
+        while input.dim() <= 3:
+            input = input.unsqueeze(0)
+        target = to_tensor(depth_np)
+        target = target.unsqueeze(0)
+        target = target.unsqueeze(0)
+
+        #print(input.shape)
+        #print(target.shape)
+
+        input, target = input.cuda(), target.cuda()
+        input_var = torch.autograd.Variable(input)
+        torch.cuda.synchronize()
+        data_time = time.time() - end
+
+        # compute output
+        end = time.time()
+        depth_pred = model(input_var)
+        if args.use_input:
+            in_depth = input[:, 3:, :, :]
+            in_valid = in_depth > 0.0
+            depth_pred[in_valid] = in_depth[in_valid]
+        torch.cuda.synchronize()
+        gpu_time = time.time() - end
+
+        # measure accuracy and record loss
+        result = Result()
+        output1 = torch.index_select(depth_pred.data, 1, torch.cuda.LongTensor([0]))
+        try:
+            result.evaluate(output1, target)
+        except RuntimeError:
+            print("Runtime error occured @", i)
+            return
+        average_meter.update(result, gpu_time, data_time, input.size(0))
+        end = time.time()
+
+        # save 8 images for visualization
+        skip = 50
+        if args.modality == 'd':
+            img_merge = None
+        else:
+            if args.modality == 'rgb':
+                rgb = input
+            elif args.modality == 'rgbd':
+                rgb = input[:,:3,:,:]
+                depth = input[:,3:,:,:]
+
+            if i == 0:
+                if args.modality == 'rgbd':
+                    img_merge = utils.merge_into_row_with_gt_and_err(rgb, depth, target, depth_pred)
+                else:
+                    img_merge = utils.merge_into_row(rgb, target, depth_pred)
+            elif (i < 8*skip) and (i % skip == 0):
+                if args.modality == 'rgbd':
+                    row = utils.merge_into_row_with_gt_and_err(rgb, depth, target, depth_pred)
+                else:
+                    row = utils.merge_into_row(rgb, target, depth_pred)
+                img_merge = utils.add_row(img_merge, row)
+            elif i == 8*skip:
+                filename = output_directory + '/comparison_' + str(epoch) + '.png'
+                utils.save_image(img_merge, filename)
+
+        if (i+1) % args.print_freq == 0:
+            print('Test: [{0}/{1}]\t'
+                  't_GPU={gpu_time:.3f}({average.gpu_time:.3f})\t'
+                  'RMSE={result.rmse:.2f}({average.rmse:.2f}) '
+                  'MAE={result.mae:.2f}({average.mae:.2f}) '
+                  'Delta1={result.delta1:.3f}({average.delta1:.3f}) '
+                  'Delta2={result.delta2:.3f}({average.delta2:.3f}) '
+                  'Delta3={result.delta3:.3f}({average.delta3:.3f}) '
+                  'REL={result.absrel:.3f}({average.absrel:.3f}) '
+                  'Lg10={result.lg10:.3f}({average.lg10:.3f}) '.format(
+                   i+1, np.size(depths, 0), gpu_time=gpu_time, result=result, average=average_meter.average()))
+
+    avg = average_meter.average()
+
+    print('\n*\n'
+        'RMSE={average.rmse:.3f}\n'
+        'MAE={average.mae:.3f}\n'
+        'Delta1={average.delta1:.3f}\n'
+        'Delta2={average.delta2:.3f}\n'
+        'Delta3={average.delta3:.3f}\n'
+        'REL={average.absrel:.3f}\n'
+        'Lg10={average.lg10:.3f}\n'
+        't_GPU={time:.3f}\n'.format(
+        average=avg, time=avg.gpu_time))
+
+    if write_to_file:
+        with open(test_csv, 'a') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writerow({'mse': avg.mse, 'rmse': avg.rmse, 'absrel': avg.absrel, 'lg10': avg.lg10,
+                'mae': avg.mae, 'delta1': avg.delta1, 'delta2': avg.delta2, 'delta3': avg.delta3,
+                'data_time': avg.data_time, 'gpu_time': avg.gpu_time})
+
+    return avg, img_merge
 
 def validate(val_loader, model, epoch, write_to_file=True):
     average_meter = AverageMeter()
