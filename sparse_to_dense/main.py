@@ -163,7 +163,7 @@ def main():
         else:
             print("=> no best model found at '{}'".format(best_model_filename))
             return
-        validate_on_raw('nyu_depth_v2_labeled.mat', model, checkpoint['epoch'], write_to_file=False)
+        validate_on_raw(sparsifier, 'nyu_depth_v2_labeled.mat', model, checkpoint['epoch'], write_to_file=False)
         return
     elif args.data in ["nyudepthv2", "small-world-4"]:
         if not args.evaluate:
@@ -354,7 +354,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
             'gpu_time': avg.gpu_time, 'data_time': avg.data_time})
 
 
-def validate_on_raw(file, model, epoch, write_to_file=True):
+def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
     average_meter = AverageMeter()
 
     nyu = h5py.File(file, "r")
@@ -372,10 +372,10 @@ def validate_on_raw(file, model, epoch, write_to_file=True):
         depth = np.transpose(depths[i, :, :])
         depth_raw = np.transpose(depths_raw[i, :, :])
 
-        print(np.count_nonzero(np.isinf(depth)))
-        print(np.count_nonzero(np.isinf(depth_raw)))
-        print(np.count_nonzero(depth_raw < 0.0))
-        print(np.count_nonzero(depth_raw == 0.0))
+        #print(np.count_nonzero(np.isinf(depth)))
+        #print(np.count_nonzero(np.isinf(depth_raw)))
+        #print(np.count_nonzero(depth_raw < 0.0))
+        #print(np.count_nonzero(depth_raw == 0.0))
 
         #print(depth)
         #print(depth_raw)
@@ -385,16 +385,20 @@ def validate_on_raw(file, model, epoch, write_to_file=True):
         rgb_np, depth_np = val_transform(False, rgb, depth, oheight=args.height, owidth=args.width)
         rgb_np, depth_raw_np = val_transform(False, rgb, depth_raw, oheight=args.height, owidth=args.width)
 
+        mask_keep = sparsifier.dense_to_sparse(rgb_np, depth_raw_np)
+        sparse_depth_raw = np.zeros(depth_raw_np.shape)
+        sparse_depth_raw[mask_keep] = depth_raw_np[mask_keep]
+
         #print(np.shape(rgb_np))
         #print(np.shape(depth_np))
         #print(np.shape(depth_raw_np))
-        print("after transformation")
-        print(np.count_nonzero(depth_raw_np == 0.0))
+        #print("after transformation")
+        #print(np.count_nonzero(depth_raw_np == 0.0))
 
         #print(rgb_np)
 
         # Treat input as batch with size 1
-        rgbd = np.append(rgb_np, np.expand_dims(depth_raw_np, axis=2), axis=2)
+        rgbd = np.append(rgb_np, np.expand_dims(sparse_depth_raw, axis=2), axis=2)
         # This should switch H x W x C to C x H x W, where C = 4 (depth)
 
         # Unqueeze for batch size 1

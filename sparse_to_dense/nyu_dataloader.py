@@ -97,8 +97,8 @@ def val_transform(is_small_world, rgb, depth, oheight, owidth):
         ])
     else:
         transform = transforms.Compose([
-            transforms.CenterCrop((228*2, 304*2)),
-            transforms.Resize(oheight / (228*2)),
+            transforms.CenterCrop((420, 560)),
+            transforms.Resize(oheight / 420),
             transforms.CenterCrop((oheight, owidth)),
         ])
     rgb_np = transform(rgb)
@@ -196,9 +196,7 @@ class NYUDataset(data.Dataset):
         if self.modality == 'rgb':
             input_np = rgb_np
         elif self.modality == 'rgbd':
-            #TODO: This is temp, so that we use raw kinect depth maps as input
-
-            #input_np = self.create_rgbd(rgb_np, depth_np)
+            input_np = self.create_rgbd(rgb_np, depth_np)
         elif self.modality == 'd':
             input_np = self.create_sparse_depth(rgb_np, depth_np)
 

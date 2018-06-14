@@ -83,21 +83,21 @@ class SimulatedStereo(DenseToSparse):
         if np.count_nonzero(depth_mask) > 0:
             min_mag_lower = np.percentile(mag[depth_mask], 100 - edge_percentage, interpolation='lower')
             min_mag_upper = np.percentile(mag[depth_mask], 100 - edge_percentage, interpolation='higher')
-            print("Upper threshold %f with %d pixels above it" %
-                  (min_mag_upper, np.count_nonzero(np.bitwise_and(depth_mask, mag >= min_mag_upper))))
-            print("Lower threshold %f with %d pixels above it" %
-                  (min_mag_lower, np.count_nonzero(np.bitwise_and(depth_mask, mag >= min_mag_lower))))
+            # print("Upper threshold %f with %d pixels above it" %
+            #      (min_mag_upper, np.count_nonzero(np.bitwise_and(depth_mask, mag >= min_mag_upper))))
+            # print("Lower threshold %f with %d pixels above it" %
+            #      (min_mag_lower, np.count_nonzero(np.bitwise_and(depth_mask, mag >= min_mag_lower))))
             mag_mask = np.bitwise_and(mag >= min_mag_upper, depth_mask)
 
             missing_samples = self.num_samples - np.count_nonzero(mag_mask)
-            assert missing_samples >= 0
+            # assert missing_samples >= 0
             if missing_samples > 0:
-                print("Missing %d samples" % missing_samples)
+                # print("Missing %d samples" % missing_samples)
                 # If we take all of mag_fill_mask we have more than desired number of samples
                 mag_fill_mask = np.bitwise_and(depth_mask, mag < min_mag_upper, mag >= min_mag_lower)
                 idx_0, idx_1 = np.nonzero(mag_fill_mask)
                 potential_samples = len(idx_0)
-                print("Got %d potential samples" % potential_samples)
+                # print("Got %d potential samples" % potential_samples)
                 if potential_samples > missing_samples:
                     # We choose some random samples to fill in
                     index_of_indices = np.random.choice(len(idx_0), missing_samples, replace=False)
@@ -106,7 +106,7 @@ class SimulatedStereo(DenseToSparse):
                     # The threshold is still the lowest possible
                 else:
                     mag_mask[idx_0, idx_1] = 1
-                    print("filling up only partly possible, as all pixels with depth <= max_depth are already taken")
+                    # print("filling up only partly possible, as all pixels with depth <= max_depth are already taken")
                     assert np.all(mag_mask[depth_mask] == 1)
 
             if self.dilate_iterations >= 0:
