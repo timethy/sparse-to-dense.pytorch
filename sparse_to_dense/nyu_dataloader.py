@@ -43,6 +43,8 @@ def h5_loader(path):
     if np.size(rgb, 0) == 3:
         rgb = np.transpose(rgb, (1, 2, 0))
     depth = np.array(h5f['depth'])
+    # TODO: Load raw
+    raw_depth = np.array(h5f['raw'])
 
     return rgb, depth
 
@@ -194,7 +196,9 @@ class NYUDataset(data.Dataset):
         if self.modality == 'rgb':
             input_np = rgb_np
         elif self.modality == 'rgbd':
-            input_np = self.create_rgbd(rgb_np, depth_np)
+            #TODO: This is temp, so that we use raw kinect depth maps as input
+
+            #input_np = self.create_rgbd(rgb_np, depth_np)
         elif self.modality == 'd':
             input_np = self.create_sparse_depth(rgb_np, depth_np)
 
