@@ -35,8 +35,9 @@ def merge_into_row_with_gt_and_err(input, depth_input, depth_target, depth_pred)
     depth_target_cpu = np.squeeze(depth_target.cpu().numpy())
     depth_pred_cpu = np.squeeze(depth_pred.data.cpu().numpy())
 
-    d_min = min(np.min(depth_input_cpu), np.min(depth_target_cpu), np.min(depth_pred_cpu))
-    d_max = max(np.max(depth_input_cpu), np.max(depth_target_cpu), np.max(depth_pred_cpu))
+    d_min = max(min(np.min(depth_input_cpu), np.min(depth_target_cpu), np.min(depth_pred_cpu)), 0.0)
+    # hard coded max depth
+    d_max = min(max(np.max(depth_input_cpu), np.max(depth_target_cpu), np.max(depth_pred_cpu)), 20.0)
     depth_input_col = colored_depthmap(depth_input_cpu, d_min, d_max)
     depth_target_col = colored_depthmap(depth_target_cpu, d_min, d_max)
     depth_pred_col = colored_depthmap(depth_pred_cpu, d_min, d_max)
@@ -45,7 +46,9 @@ def merge_into_row_with_gt_and_err(input, depth_input, depth_target, depth_pred)
     # mask out invalid depth to compare against
     depth_err[depth_target_cpu == 0.0] = 0.0
     # Color the error individually
-    depth_err_col = colored_depthmap(depth_err)
+    # depth_err_col = colored_depthmap(depth_err)
+    # or not:
+    depth_err_col = colored_depthmap(depth_err, d_min, d_max)
 
     img_merge = np.hstack([rgb, depth_input_col, depth_target_col, depth_pred_col, depth_err_col])
 

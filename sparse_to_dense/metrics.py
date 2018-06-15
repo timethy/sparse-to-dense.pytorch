@@ -28,8 +28,11 @@ class Result(object):
         self.delta1, self.delta2, self.delta3 = delta1, delta2, delta3
         self.data_time, self.gpu_time = data_time, gpu_time
 
-    def evaluate(self, output, target):
-        valid_mask = target>0
+    def evaluate(self, output, target, mask=None):
+        if mask is None:
+            valid_mask = target>0
+        else:
+            valid_mask = (target>0) & mask
         output = output[valid_mask]
         target = target[valid_mask]
 

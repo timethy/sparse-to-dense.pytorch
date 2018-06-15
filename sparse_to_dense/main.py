@@ -313,9 +313,9 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # compute depth_pred
         end = time.time()
         depth_pred = model(input_var)
+        in_depth = input[:, 3:, :, :]
+        in_valid = in_depth > 0.0
         if args.use_input:
-            in_depth = input[:, 3:, :, :]
-            in_valid = in_depth > 0.0
             depth_pred[in_valid] = in_depth[in_valid]
         loss = criterion(depth_pred, target_var)
         optimizer.zero_grad()
@@ -327,7 +327,10 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # measure accuracy and record loss
         result = Result()
         output1 = torch.index_select(depth_pred.data, 1, torch.cuda.LongTensor([0]))
-        result.evaluate(output1, target)
+        if args.use_input:
+            result.evaluate(output1, target, mask=~in_valid)
+        else:
+            result.evaluate(output1, target)
         average_meter.update(result, gpu_time, data_time, input.size(0))
         end = time.time()
 
@@ -366,8 +369,10 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
     # switch to evaluate mode
     model.eval()
 
+    num_images = 0
+    img_merge = None
     end = time.time()
-    for i in range(np.size(depths, 0)):
+    for i in [602, 111]:  # range(np.size(depths, 0)):
         rgb = np.transpose(rgbs[i, :, :, :], (2, 1, 0))
         depth = np.transpose(depths[i, :, :])
         depth_raw = np.transpose(depths_raw[i, :, :])
@@ -420,9 +425,9 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
         # compute output
         end = time.time()
         depth_pred = model(input_var)
+        in_depth = input[:, 3:, :, :]
+        in_valid = in_depth > 0.0
         if args.use_input:
-            in_depth = input[:, 3:, :, :]
-            in_valid = in_depth > 0.0
             depth_pred[in_valid] = in_depth[in_valid]
         torch.cuda.synchronize()
         gpu_time = time.time() - end
@@ -431,38 +436,41 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
         result = Result()
         output1 = torch.index_select(depth_pred.data, 1, torch.cuda.LongTensor([0]))
         try:
-            result.evaluate(output1, target)
+            if args.use_input:
+                result.evaluate(output1, target, mask=~in_valid)
+            else:
+                result.evaluate(output1, target)
         except RuntimeError:
             print("Runtime error occured @", i)
             return
         average_meter.update(result, gpu_time, data_time, input.size(0))
         end = time.time()
 
-        # save 8 images for visualization
-        skip = 50
-        if args.modality == 'd':
-            img_merge = None
-        else:
+        # save a couple images for visualization not too sparse, but good rmse
+        if result.rmse < 0.5 and in_valid.int().sum() <= 61440:  # 80% sparsity
+            print("Got %d good images with rmse %f, #samples %d @%d" % (num_images, result.rmse, in_valid.int().sum(), i))
             if args.modality == 'rgb':
                 rgb = input
             elif args.modality == 'rgbd':
-                rgb = input[:,:3,:,:]
-                depth = input[:,3:,:,:]
+                rgb = input[:, :3, :, :]
+                depth = input[:, 3:, :, :]
 
-            if i == 0:
+            if num_images == 0:
+                num_images += 1
                 if args.modality == 'rgbd':
                     img_merge = utils.merge_into_row_with_gt_and_err(rgb, depth, target, depth_pred)
                 else:
                     img_merge = utils.merge_into_row(rgb, target, depth_pred)
-            elif (i < 8*skip) and (i % skip == 0):
+            else:
+                num_images += 1
                 if args.modality == 'rgbd':
                     row = utils.merge_into_row_with_gt_and_err(rgb, depth, target, depth_pred)
                 else:
                     row = utils.merge_into_row(rgb, target, depth_pred)
                 img_merge = utils.add_row(img_merge, row)
-            elif i == 8*skip:
-                filename = output_directory + '/comparison_' + str(epoch) + '.png'
-                utils.save_image(img_merge, filename)
+                if num_images == 16:
+                    filename = output_directory + '/comparison_' + str(epoch) + '.png'
+                    utils.save_image(img_merge, filename)
 
         if (i+1) % args.print_freq == 0:
             print('Test: [{0}/{1}]\t'
@@ -476,6 +484,9 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
                   'Lg10={result.lg10:.3f}({average.lg10:.3f}) '.format(
                    i+1, np.size(depths, 0), gpu_time=gpu_time, result=result, average=average_meter.average()))
 
+    if num_images < 16 and img_merge is not None:
+        filename = output_directory + '/comparison_' + str(epoch) + '.png'
+        utils.save_image(img_merge, filename)
     avg = average_meter.average()
 
     print('\n*\n'
@@ -515,9 +526,9 @@ def validate(val_loader, model, epoch, write_to_file=True):
         # compute output
         end = time.time()
         depth_pred = model(input_var)
+        in_depth = input[:, 3:, :, :]
+        in_valid = in_depth > 0.0
         if args.use_input:
-            in_depth = input[:, 3:, :, :]
-            in_valid = in_depth > 0.0
             depth_pred[in_valid] = in_depth[in_valid]
         torch.cuda.synchronize()
         gpu_time = time.time() - end
@@ -526,7 +537,10 @@ def validate(val_loader, model, epoch, write_to_file=True):
         result = Result()
         output1 = torch.index_select(depth_pred.data, 1, torch.cuda.LongTensor([0]))
         try:
-            result.evaluate(output1, target)
+            if args.use_input:
+                result.evaluate(output1, target, mask=~in_valid)
+            else:
+                result.evaluate(output1, target)
         except RuntimeError:
             print("Runtime error occured @", i)
             return
