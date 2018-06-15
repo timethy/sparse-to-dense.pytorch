@@ -1,0 +1,17 @@
+name: torch27
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pytorch
+  - torchvision
+  - cuda91
+  - h5py
+  - matplotlib
+  - imageio
+  - scikit-image
+  - pip
+  - pip:
+    - rospkg
+    - catkin_pkg
+
