@@ -77,10 +77,10 @@ class SimulatedStereo(DenseToSparse):
         gx = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=5)
         gy = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=5)
 
-        edge_percentage = float(100 * self.num_samples) / np.size(depth)
-
         mag = cv2.magnitude(gx, gy)
-        if np.count_nonzero(depth_mask) > 0:
+        non_zeros = np.count_nonzero(depth_mask)
+        edge_percentage = float(100 * self.num_samples) / non_zeros
+        if non_zeros > 0 and edge_percentage < 100:
             min_mag_lower = np.percentile(mag[depth_mask], 100 - edge_percentage, interpolation='lower')
             min_mag_upper = np.percentile(mag[depth_mask], 100 - edge_percentage, interpolation='higher')
             # print("Upper threshold %f with %d pixels above it" %
