@@ -1,4 +1,4 @@
-name: torch27
+name: torch
 channels:
   - pytorch
   - defaults
