@@ -96,7 +96,7 @@ def val_transform(is_small_world, rgb, depth, oheight, owidth):
             transforms.CenterCrop((oheight, owidth))
         ])
     else:
-        n = 2
+        n = 4
         transform = transforms.Compose([
             transforms.CenterCrop((480-n*12, 640-n*16)),  # 480-24
             transforms.Resize(oheight / (480-n*12)),

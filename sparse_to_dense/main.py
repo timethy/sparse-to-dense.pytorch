@@ -372,7 +372,7 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
     num_images = 0
     img_merge = None
     end = time.time()
-    for i in [602, 111]:  # range(np.size(depths, 0)):
+    for i in range(np.size(depths, 0)):
         rgb = np.transpose(rgbs[i, :, :, :], (2, 1, 0))
         depth = np.transpose(depths[i, :, :])
         depth_raw = np.transpose(depths_raw[i, :, :])
@@ -447,7 +447,7 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
         end = time.time()
 
         # save a couple images for visualization not too sparse, but good rmse
-        if result.rmse < 0.5 and in_valid.int().sum() <= 61440:  # 80% sparsity
+        if result.rmse < 1.0 and in_valid.int().sum() <= 61440:  # 80% sparsity
             print("Got %d good images with rmse %f, #samples %d @%d" % (num_images, result.rmse, in_valid.int().sum(), i))
             if args.modality == 'rgb':
                 rgb = input
