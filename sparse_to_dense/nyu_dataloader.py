@@ -44,7 +44,7 @@ def h5_loader(path):
         rgb = np.transpose(rgb, (1, 2, 0))
     depth = np.array(h5f['depth'])
     # TODO: Load raw
-    raw_depth = np.array(h5f['raw'])
+    # raw_depth = np.array(h5f['raw'])
 
     return rgb, depth
 
