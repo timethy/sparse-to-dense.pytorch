@@ -213,10 +213,44 @@ class Contours(DenseToSparse):
             im2, contours, hierarchy = cv2.findContours(mag_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             chosen = np.random.choice([0, 1], size=len(contours), replace=True)
 
-            print(chosen)
+            #print(chosen)
 
             mask = np.zeros(depth_mask.shape, np.uint8)
             cv2.drawContours(mask, [c for i, c in enumerate(contours) if chosen[i]], -1, 255, -1)
 
             return np.bitwise_and(depth_mask, mask != 0)
+
+
+class Superpixels(DenseToSparse):
+    name = "superpixels"
+
+    def __init__(self, num_samples, min_val=100, max_val=200):
+        DenseToSparse.__init__(self)
+        self.num_samples = num_samples
+
+    def __repr__(self):
+        return "%s{ns=%d,min=%.4f,max=%.4f}" % \
+               (self.name, self.num_samples)
+
+    def dense_to_sparse(self, rgb, depth):
+        depth_mask = depth != 0.0
+
+        seeds = cv2.ximgproc.createSuperpixelSEEDS(np.size(rgb, 1), np.size(rgb, 0), 4, self.num_samples, 4)
+
+        seeds.iterate(rgb, 8)
+
+        labels_out = seeds.getLabels()
+        print(labels_out)
+
+        chosen = np.random.choice([0, 1], size=self.num_samples, replace=True, p=[0.75, 0.25])
+
+        mask = np.zeros(depth_mask.shape, np.bool)
+
+        for i, choice in enumerate(chosen):
+            print(choice)
+            if choice == 1:
+                print(np.sum(labels_out == i))
+                mask[labels_out == i] = 1
+
+        return np.bitwise_and(depth_mask, mask)
 
