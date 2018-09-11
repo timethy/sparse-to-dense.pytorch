@@ -19,7 +19,7 @@ from sparse_to_dense.nyu_dataloader import NYUDataset, val_transform, to_tensor,
 from sparse_to_dense.scenenet_loader import ScenenetDataset
 from sparse_to_dense.models import Decoder, ResNet
 from sparse_to_dense.metrics import AverageMeter, Result
-from sparse_to_dense.dense_to_sparse import UniformSampling, SimulatedStereo, SimulatedKinect
+from sparse_to_dense.dense_to_sparse import UniformSampling, SimulatedStereo, SimulatedKinect, Contours
 from sparse_to_dense import criteria
 from sparse_to_dense import utils
 
@@ -27,7 +27,7 @@ model_names = ['resnet18', 'resnet50']
 loss_names = ['l1', 'l2']
 # If u specify nyuraw, we run evaluation on it
 data_names = ['nyudepthv2', 'nyuraw', "scenenet", "scenenet-24", "small-world-4"]
-sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo, SimulatedKinect]]
+sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo, SimulatedKinect, Contours]]
 decoder_names = Decoder.names
 modality_names = NYUDataset.modality_names
 
@@ -129,6 +129,8 @@ def choose_sparsifier(args):
     elif args.sparsifier == SimulatedKinect.name:
         return SimulatedKinect(num_samples=args.num_samples,
                                weight_magnitude=args.weight_magnitude, weight_depth=args.weight_depth)
+    elif args.sparsifier == Contours.name:
+        return Contours(num_samples=args.num_samples)
     return None
 
 
