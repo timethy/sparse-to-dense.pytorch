@@ -15,11 +15,11 @@ import torch.utils.data
 
 import numpy as np
 
-from sparse_to_dense.nyu_dataloader import NYUDataset, val_transform, to_tensor
+from sparse_to_dense.nyu_dataloader import NYUDataset, val_transform, to_tensor, raw_val_transform
 from sparse_to_dense.scenenet_loader import ScenenetDataset
 from sparse_to_dense.models import Decoder, ResNet
 from sparse_to_dense.metrics import AverageMeter, Result
-from sparse_to_dense.dense_to_sparse import UniformSampling, SimulatedStereo
+from sparse_to_dense.dense_to_sparse import UniformSampling, SimulatedStereo, SimulatedKinect, Contours, Superpixels
 from sparse_to_dense import criteria
 from sparse_to_dense import utils
 
@@ -27,7 +27,7 @@ model_names = ['resnet18', 'resnet50']
 loss_names = ['l1', 'l2']
 # If u specify nyuraw, we run evaluation on it
 data_names = ['nyudepthv2', 'nyuraw', "scenenet", "scenenet-24", "small-world-4"]
-sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo]]
+sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo, SimulatedKinect, Contours, Superpixels]]
 decoder_names = Decoder.names
 modality_names = NYUDataset.modality_names
 
@@ -51,15 +51,6 @@ parser.add_argument('--modality', '-m', metavar='MODALITY', default='rgb',
                     help='modality: ' +
                         ' | '.join(modality_names) +
                         ' (default: rgb)')
-parser.add_argument('-s', '--num-samples', default=0, type=int, metavar='N',
-                    help='number of sparse depth samples (default: 0)')
-parser.add_argument('--max-depth', default=-1.0, type=float, metavar='D',
-                    help='cut-off depth of sparsifier, negative values means infinity (default: inf [m])')
-parser.add_argument('--sparsifier', metavar='SPARSIFIER', default=UniformSampling.name,
-                    choices=sparsifier_names,
-                    help='sparsifier: ' +
-                         ' | '.join(sparsifier_names) +
-                         ' (default: ' + UniformSampling.name + ')')
 parser.add_argument('--decoder', '-d', metavar='DECODER', default='deconv2',
                     choices=decoder_names,
                     help='decoder: ' +
@@ -88,9 +79,7 @@ parser.add_argument('--print-freq', '-p', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
-# This is kinda hacked into here
-parser.add_argument('--evaluate-raw-kinect', dest='evaluate', action='store_true',
-                    help='evaluate model on raw kinect depth data')
+parser.add_argument('--relative-depth')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                     help='evaluate model on validation set')
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
@@ -104,11 +93,48 @@ parser.add_argument('--width', type=int, metavar='W',
 parser.add_argument('--height', type=int, metavar='H',
                     default=228, help='The height of the input layer of the network (default: 228)')
 
+
+def add_sparsifier_args(parser):
+    parser.add_argument('-s', '--num-samples', default=0, type=int, metavar='N',
+                        help='number of sparse depth samples (default: 0)')
+    parser.add_argument('--max-depth', default=-1.0, type=float, metavar='D',
+                        help='cut-off depth of sparsifier, negative values means infinity (default: inf [m])')
+    parser.add_argument('--sparsifier', metavar='SPARSIFIER', default=UniformSampling.name,
+                        choices=sparsifier_names,
+                        help='sparsifier: ' +
+                             ' | '.join(sparsifier_names) +
+                             ' (default: ' + UniformSampling.name + ')')
+    parser.add_argument('--dilate-kernel', default=0, type=int)
+    parser.add_argument('--dilate-iterations', default=0, type=int)
+    parser.add_argument('--weight-magnitude', default=1.0, type=float)
+    parser.add_argument('--weight-depth', default=1.0, type=float)
+
+
+add_sparsifier_args(parser)
+
 fieldnames = ['mse', 'rmse', 'absrel', 'lg10', 'mae', 
                 'delta1', 'delta2', 'delta3', 
                 'data_time', 'gpu_time']
 best_result = Result()
 best_result.set_to_worst()
+
+
+def choose_sparsifier(args):
+    max_depth = args.max_depth if args.max_depth >= 0.0 else np.inf
+    if args.sparsifier == UniformSampling.name:
+        return UniformSampling(num_samples=args.num_samples, max_depth=max_depth)
+    elif args.sparsifier == SimulatedStereo.name:
+        return SimulatedStereo(num_samples=args.num_samples, max_depth=max_depth,
+                               dilate_kernel=args.dilate_kernel, dilate_iterations=args.dilate_iterations)
+    elif args.sparsifier == SimulatedKinect.name:
+        return SimulatedKinect(num_samples=args.num_samples,
+                               weight_magnitude=args.weight_magnitude, weight_depth=args.weight_depth)
+    elif args.sparsifier == Contours.name:
+        return Contours(num_samples=args.num_samples)
+    elif args.sparsifier == Superpixels.name:
+        return Superpixels(num_samples=args.num_samples)
+    return None
+
 
 def main():
     global args, best_result, output_directory, train_csv, test_csv
@@ -120,12 +146,7 @@ def main():
         print("max depth is forced to be 0.0 when input modality is rgb/rgbd")
         args.max_depth = 0.0
 
-    sparsifier = None
-    max_depth = args.max_depth if args.max_depth >= 0.0 else np.inf
-    if args.sparsifier == UniformSampling.name:
-        sparsifier = UniformSampling(num_samples=args.num_samples, max_depth=max_depth)
-    elif args.sparsifier == SimulatedStereo.name:
-        sparsifier = SimulatedStereo(num_samples=args.num_samples, max_depth=max_depth)
+    sparsifier = choose_sparsifier(args)
 
     # create results folder, if not already exists
     output_directory = os.path.join('results',
@@ -261,8 +282,10 @@ def main():
             writer.writeheader()
 
     if torch.cuda.device_count() > 1:
+        torch.cuda.device(0)
         print("=> Using", torch.cuda.device_count(), "GPUs!")
         model = torch.nn.DataParallel(model)
+
     model = model.cuda()
     print(model)
     print("=> model transferred to GPU.")
@@ -387,8 +410,8 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
         #print(np.shape(depth))
         #print(np.shape(depth_raw))
 
-        rgb_np, depth_np = val_transform(False, rgb, depth, oheight=args.height, owidth=args.width)
-        rgb_np, depth_raw_np = val_transform(False, rgb, depth_raw, oheight=args.height, owidth=args.width)
+        rgb_np, depth_np = raw_val_transform(rgb, depth, oheight=args.height, owidth=args.width)
+        rgb_np, depth_raw_np = raw_val_transform(rgb, depth_raw, oheight=args.height, owidth=args.width)
 
         mask_keep = sparsifier.dense_to_sparse(rgb_np, depth_raw_np)
         sparse_depth_raw = np.zeros(depth_raw_np.shape)
@@ -406,7 +429,7 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
         rgbd = np.append(rgb_np, np.expand_dims(sparse_depth_raw, axis=2), axis=2)
         # This should switch H x W x C to C x H x W, where C = 4 (depth)
 
-        # Unqueeze for batch size 1
+        # Unsqueeze for batch size 1
         input = to_tensor(rgbd)
         while input.dim() <= 3:
             input = input.unsqueeze(0)
@@ -449,6 +472,7 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
         # save a couple images for visualization not too sparse, but good rmse
         if result.rmse < 1.0 and in_valid.int().sum() <= 61440:  # 80% sparsity
             print("Got %d good images with rmse %f, #samples %d @%d" % (num_images, result.rmse, in_valid.int().sum(), i))
+
             if args.modality == 'rgb':
                 rgb = input
             elif args.modality == 'rgbd':
@@ -461,7 +485,7 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
                     img_merge = utils.merge_into_row_with_gt_and_err(rgb, depth, target, depth_pred)
                 else:
                     img_merge = utils.merge_into_row(rgb, target, depth_pred)
-            else:
+            elif num_images < 16:
                 num_images += 1
                 if args.modality == 'rgbd':
                     row = utils.merge_into_row_with_gt_and_err(rgb, depth, target, depth_pred)
@@ -471,6 +495,8 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
                 if num_images == 16:
                     filename = output_directory + '/comparison_' + str(epoch) + '.png'
                     utils.save_image(img_merge, filename)
+            else:
+                num_images += 1
 
         if (i+1) % args.print_freq == 0:
             print('Test: [{0}/{1}]\t'

@@ -1,3 +1,4 @@
+# coding=utf-8
 import numpy as np
 import cv2
 
@@ -118,3 +119,149 @@ class SimulatedStereo(DenseToSparse):
             return mag_mask
         else:
             return depth_mask
+
+
+# Pixels are sampled with probability ~ w_t * t + w_d / d²
+# num_samples pixels are 'chosen without putting back' (ziehen ohne zurücklegen)
+class SimulatedKinect(DenseToSparse):
+    name = "sim_kinect"
+
+    def __init__(self, num_samples, weight_magnitude=1.0, weight_depth=1.0):
+        DenseToSparse.__init__(self)
+        self.num_samples = num_samples
+        self.weight_magnitude = weight_magnitude
+        self.weight_depth = weight_depth
+
+    def __repr__(self):
+        return "%s{ns=%d,wm=%.4f,wd=%.4f}" % \
+               (self.name, self.num_samples, self.weight_magnitude, self.weight_depth)
+
+    def dense_to_sparse(self, rgb, depth):
+        gray = rgb2grayscale(rgb)
+
+        depth_mask = depth != 0.0
+        non_zeros = np.count_nonzero(depth_mask)
+
+        if non_zeros <= self.num_samples:
+            return depth_mask
+        else:
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            gx = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=5)
+            gy = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=5)
+
+            mag = cv2.magnitude(gx, gy)
+
+            # rescale depth to 0..1
+            max_depth = np.max(depth)
+            depth_ = depth / max_depth
+
+            depth_sq = depth_ * depth_
+
+            #print(np.max(mag))
+            #print(np.max(1.0/depth_sq[depth_mask]))
+
+            probs = self.weight_magnitude * mag / np.max(mag)
+            #print(np.max(probs))
+            probs[depth_mask] += self.weight_depth / depth_sq[depth_mask]
+            #print(np.max(probs))
+            probs[~depth_mask] = 0.0
+            probs /= np.sum(probs)
+            indices = np.random.choice(np.size(depth), size=self.num_samples, replace=False, p=probs.flatten())
+            assert len(indices) == len(set(indices))
+
+            mask = np.zeros(np.size(depth), dtype=np.bool)
+            mask[indices] = 1
+
+            return np.reshape(mask, np.shape(depth))
+
+
+class Contours(DenseToSparse):
+    name = "contours"
+
+    def __init__(self, num_samples, min_val=100, max_val=200):
+        DenseToSparse.__init__(self)
+        self.num_samples = num_samples
+        self.min_val = min_val
+        self.max_val = max_val
+
+    def __repr__(self):
+        return "%s{ns=%d,min=%.4f,max=%.4f}" % \
+               (self.name, self.num_samples, self.min_val, self.max_val)
+
+    def dense_to_sparse(self, rgb, depth):
+        depth_mask = depth != 0.0
+
+        non_zeros = np.count_nonzero(depth_mask)
+
+        if non_zeros <= self.num_samples:
+            return depth_mask
+        else:
+            gray = rgb2grayscale(rgb)
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            gx = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=5)
+            gy = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=5)
+
+            mag = cv2.magnitude(gx, gy)
+
+            target_samples = 1.0 * self.num_samples / np.size(depth) * non_zeros
+            edge_percentage = float(100 * target_samples) / np.size(depth)
+            min_mag_upper = np.percentile(mag[depth_mask], 100 - edge_percentage, interpolation='higher')
+
+            mag_mask = np.zeros(depth_mask.shape, np.uint8)
+            mag_mask[np.bitwise_and(mag >= min_mag_upper, depth_mask)] = 255
+
+            im2, contours, hierarchy = cv2.findContours(mag_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            chosen = np.random.choice([0, 1], size=len(contours), replace=True)
+
+            #print(chosen)
+
+            mask = np.zeros(depth_mask.shape, np.uint8)
+            cv2.drawContours(mask, [c for i, c in enumerate(contours) if chosen[i]], -1, 255, -1)
+
+            return np.bitwise_and(depth_mask, mask != 0)
+
+
+class Superpixels(DenseToSparse):
+    name = "superpixels"
+
+    def __init__(self, num_samples):
+        DenseToSparse.__init__(self)
+        self.num_samples = num_samples
+
+    def __repr__(self):
+        return "%s{ns=%d}" % \
+               (self.name, self.num_samples)
+
+    def dense_to_sparse(self, rgb, depth):
+        depth_mask = depth != 0.0
+
+        seeds = cv2.ximgproc.createSuperpixelSEEDS(np.size(rgb, 1), np.size(rgb, 0), 3, self.num_samples, 8)
+
+        seeds.iterate(rgb, 8)
+
+        labels_out = seeds.getLabels()
+
+        num_labels = self.num_samples
+
+        randomness = "uar"
+        if randomness == "uar":
+            choices = np.random.choice([0, 1], size=self.num_samples, replace=True, p=[0.1, 0.9])
+            chosen = [i for i, choice in enumerate(choices) if choice == 1]
+        else:
+            # Thinking in process here...
+            probs = np.ones(np.shape(depth_mask), np.uint32)
+            chosen = []
+            choice = np.random.choice(num_labels, size=1, replace=False, p=probs)
+
+            chosen_pixels = labels_out == choice
+
+            for i in xrange(self.num_samples):
+                chosen += choice
+
+        mask = np.zeros(depth_mask.shape, np.bool)
+
+        for i in chosen:
+            mask[labels_out == i] = 1
+
+        return np.bitwise_and(depth_mask, mask)
+
