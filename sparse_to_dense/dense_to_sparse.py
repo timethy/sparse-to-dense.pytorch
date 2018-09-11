@@ -185,8 +185,8 @@ class Contours(DenseToSparse):
         self.max_val = max_val
 
     def __repr__(self):
-        return "%s{ns=%d,wm=%.4f,wd=%.4f}" % \
-               (self.name, self.num_samples, self.weight_magnitude, self.weight_depth)
+        return "%s{ns=%d,min=%.4f,max=%.4f}" % \
+               (self.name, self.num_samples, self.min_val, self.max_val)
 
     def dense_to_sparse(self, rgb, depth):
         depth_mask = depth != 0.0
