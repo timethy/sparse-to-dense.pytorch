@@ -224,33 +224,44 @@ class Contours(DenseToSparse):
 class Superpixels(DenseToSparse):
     name = "superpixels"
 
-    def __init__(self, num_samples, min_val=100, max_val=200):
+    def __init__(self, num_samples):
         DenseToSparse.__init__(self)
         self.num_samples = num_samples
 
     def __repr__(self):
-        return "%s{ns=%d,min=%.4f,max=%.4f}" % \
+        return "%s{ns=%d}" % \
                (self.name, self.num_samples)
 
     def dense_to_sparse(self, rgb, depth):
         depth_mask = depth != 0.0
 
-        seeds = cv2.ximgproc.createSuperpixelSEEDS(np.size(rgb, 1), np.size(rgb, 0), 4, self.num_samples, 4)
+        seeds = cv2.ximgproc.createSuperpixelSEEDS(np.size(rgb, 1), np.size(rgb, 0), 3, self.num_samples, 8)
 
         seeds.iterate(rgb, 8)
 
         labels_out = seeds.getLabels()
-        print(labels_out)
 
-        chosen = np.random.choice([0, 1], size=self.num_samples, replace=True, p=[0.75, 0.25])
+        num_labels = self.num_samples
+
+        randomness = "uar"
+        if randomness == "uar":
+            choices = np.random.choice([0, 1], size=self.num_samples, replace=True, p=[0.1, 0.9])
+            chosen = [i for i, choice in enumerate(choices) if choice == 1]
+        else:
+            # Thinking in process here...
+            probs = np.ones(np.shape(depth_mask), np.uint32)
+            chosen = []
+            choice = np.random.choice(num_labels, size=1, replace=False, p=probs)
+
+            chosen_pixels = labels_out == choice
+
+            for i in xrange(self.num_samples):
+                chosen += choice
 
         mask = np.zeros(depth_mask.shape, np.bool)
 
-        for i, choice in enumerate(chosen):
-            print(choice)
-            if choice == 1:
-                print(np.sum(labels_out == i))
-                mask[labels_out == i] = 1
+        for i in chosen:
+            mask[labels_out == i] = 1
 
         return np.bitwise_and(depth_mask, mask)
 
