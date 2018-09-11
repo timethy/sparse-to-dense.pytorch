@@ -18,7 +18,7 @@ def find_classes(dir):
     class_to_idx = {classes[i]: i for i in range(len(classes))}
     return classes, class_to_idx
 
-def make_dataset(dir, class_to_idx):
+def make_dataset(dir, class_to_idx, subtype):
     images = []
     dir = os.path.expanduser(dir)
     for target in sorted(os.listdir(dir)):
@@ -32,19 +32,23 @@ def make_dataset(dir, class_to_idx):
                 if is_image_file(fname):
                     path = os.path.join(root, fname)
                     item = (path, class_to_idx[target])
-                    images.append(item)
+                    # This couples the loader with the creation...
+                    h5f = h5py.File(path, "r")
+                    if subtype in h5f:
+                        images.append(item)
+                    else:
+                        print('Discarding %s as subtype not found.')
 
     return images
 
-def h5_loader(path):
+
+def h5_loader(subtype, path):
     h5f = h5py.File(path, "r")
     rgb = np.array(h5f['rgb'])
     # Transform C, H, W to H, W, C.
     if np.size(rgb, 0) == 3:
         rgb = np.transpose(rgb, (1, 2, 0))
-    depth = np.array(h5f['depth'])
-    # TODO: Load raw
-    # raw_depth = np.array(h5f['raw'])
+    depth = np.array(h5f[subtype])
 
     return rgb, depth
 
@@ -61,7 +65,7 @@ def train_transform(is_small_world, rgb, depth, oheight, owidth):
     # perform 1st part of data augmentation
     if is_small_world:
         transform = transforms.Compose([
-            transforms.Resize(oheight / iheight * s),  # this is for computational efficiency, since rotation is very slow
+            transforms.Resize(oheight / iheight * s),
             transforms.CenterCrop((oheight, owidth)),
             transforms.HorizontalFlip(do_flip)
         ])
@@ -69,7 +73,7 @@ def train_transform(is_small_world, rgb, depth, oheight, owidth):
         transform = transforms.Compose([
             # Crop so we don't have white frame in rgb image
             transforms.CenterCrop((228*2, 304*2)),
-            transforms.Resize(250.0 / (228*2)),  # this is for computational efficiency, since rotation is very slow
+            transforms.Resize(250.0 / (228*2)),
             transforms.Rotate(angle),
             transforms.Resize(s),
             transforms.CenterCrop((oheight, owidth)),
@@ -86,9 +90,23 @@ def train_transform(is_small_world, rgb, depth, oheight, owidth):
 
     return rgb_np, depth_np
 
-def val_transform(is_small_world, rgb, depth, oheight, owidth):
-    depth_np = depth
 
+def raw_val_transform(rgb, depth, oheight, owidth):
+    # Remove frame of invalid depths
+    n = 4
+    transform = transforms.Compose([
+        transforms.CenterCrop((480-n*12, 640-n*16)),
+        transforms.Resize(oheight / (480-n*12)),
+        transforms.CenterCrop((oheight, owidth)),
+    ])
+    rgb_np = transform(rgb)
+    rgb_np = np.asfarray(rgb_np, dtype='float') / 255
+    depth_np = transform(depth)
+
+    return rgb_np, depth_np
+
+
+def val_transform(is_small_world, rgb, depth, oheight, owidth):
     # perform 1st part of data augmentation
     if is_small_world:
         transform = transforms.Compose([
@@ -96,17 +114,17 @@ def val_transform(is_small_world, rgb, depth, oheight, owidth):
             transforms.CenterCrop((oheight, owidth))
         ])
     else:
-        n = 4
         transform = transforms.Compose([
-            transforms.CenterCrop((480-n*12, 640-n*16)),  # 480-24
-            transforms.Resize(oheight / (480-n*12)),
+            transforms.CenterCrop((228*2, 304*2)),  # 480-24
+            transforms.Resize(oheight / (228*2)),
             transforms.CenterCrop((oheight, owidth)),
         ])
     rgb_np = transform(rgb)
     rgb_np = np.asfarray(rgb_np, dtype='float') / 255
-    depth_np = transform(depth_np)
+    depth_np = transform(depth)
 
     return rgb_np, depth_np
+
 
 def rgb2grayscale(rgb):
     return rgb[:,:,0] * 0.2989 + rgb[:,:,1] * 0.587 + rgb[:,:,2] * 0.114
@@ -114,16 +132,20 @@ def rgb2grayscale(rgb):
 
 to_tensor = transforms.ToTensor()
 
+
 class NYUDataset(data.Dataset):
     modality_names = ['rgb', 'rgbd', 'd'] # , 'g', 'gd'
 
-    def __init__(self, root, type, sparsifier=None, modality='rgb', loader=h5_loader, oheight=228, owidth=304):
+    # Subtype is one of (raw, depth)
+    def __init__(self, root, type, subtype='depth',
+                 sparsifier=None, modality='rgb', loader=h5_loader, oheight=228, owidth=304):
         classes, class_to_idx = find_classes(root)
-        imgs = make_dataset(root, class_to_idx)
+        imgs = make_dataset(root, class_to_idx, subtype)
         if len(imgs) == 0:
             raise(RuntimeError("Found 0 images in subfolders of: " + root + "\n"
                                "Supported image extensions are: " + ",".join(IMG_EXTENSIONS)))
 
+        self.subtype = subtype
         self.root = root
         self.imgs = imgs
         self.classes = classes
@@ -170,7 +192,10 @@ class NYUDataset(data.Dataset):
             tuple: (rgb, depth) the raw data.
         """
         path, target = self.imgs[index]
-        rgb, depth = self.loader(path)
+        rgb, depth = self.loader(self.subtype, path)
+        # depth_max = np.max(depth)
+        # if depth_max > 0:
+        #     depth /= depth_max
         return rgb, depth
 
     def __get_all_item__(self, index):
@@ -223,3 +248,4 @@ class NYUDataset(data.Dataset):
 
     def __len__(self):
         return len(self.imgs)
+

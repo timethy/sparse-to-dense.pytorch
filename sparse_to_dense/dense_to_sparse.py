@@ -1,3 +1,4 @@
+# coding=utf-8
 import numpy as np
 import cv2
 
@@ -118,3 +119,57 @@ class SimulatedStereo(DenseToSparse):
             return mag_mask
         else:
             return depth_mask
+
+
+# Pixels are sampled with probability ~ w_t * t + w_d / d²
+# num_samples pixels are 'chosen without putting back' (ziehen ohne zurücklegen)
+class SimulatedKinect(DenseToSparse):
+    name = "sim_kinect"
+
+    def __init__(self, num_samples, weight_magnitude=1.0, weight_depth=1.0):
+        DenseToSparse.__init__(self)
+        self.num_samples = num_samples
+        self.weight_magnitude = weight_magnitude
+        self.weight_depth = weight_depth
+
+    def __repr__(self):
+        return "%s{ns=%d,wm=%.4f,wd=%.4f}" % \
+               (self.name, self.num_samples, self.weight_magnitude, self.weight_depth)
+
+    def dense_to_sparse(self, rgb, depth):
+        gray = rgb2grayscale(rgb)
+
+        depth_mask = depth != 0.0
+        non_zeros = np.count_nonzero(depth_mask)
+
+        if non_zeros <= self.num_samples:
+            return depth_mask
+        else:
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            gx = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=5)
+            gy = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=5)
+
+            mag = cv2.magnitude(gx, gy)
+
+            # rescale depth to 0..1
+            max_depth = np.max(depth)
+            depth_ = depth / max_depth
+
+            depth_sq = depth_ * depth_
+
+            #print(np.max(mag))
+            #print(np.max(1.0/depth_sq[depth_mask]))
+
+            probs = self.weight_magnitude * mag / np.max(mag)
+            #print(np.max(probs))
+            probs[depth_mask] += self.weight_depth / depth_sq[depth_mask]
+            #print(np.max(probs))
+            probs[~depth_mask] = 0.0
+            probs /= np.sum(probs)
+            indices = np.random.choice(np.size(depth), size=self.num_samples, replace=False, p=probs.flatten())
+            assert len(indices) == len(set(indices))
+
+            mask = np.zeros(np.size(depth), dtype=np.bool)
+            mask[indices] = 1
+
+            return np.reshape(mask, np.shape(depth))
