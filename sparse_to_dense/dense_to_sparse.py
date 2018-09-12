@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # coding=utf-8
 import matplotlib.pyplot as plt
 import numpy as np
@@ -292,10 +293,16 @@ class Contours(DenseToSparse):
         areas = np.zeros(len(contours))
         avg_depth = np.zeros(len(contours))
         for i in range(0, len(contours)):
+            valid_depth_points = 0.0
             for contour_point in contours[i]:
-                avg_depth[i] = avg_depth[i] + depth[contour_point[0][1],
-                                                    contour_point[0][0]]
-            avg_depth[i] = avg_depth[i] / len(contours[i])
+                depth_m = depth[contour_point[0][1], contour_point[0][0]]
+                if (depth_m > 0.0):
+                    avg_depth[i] = avg_depth[i] + depth_m
+                    valid_depth_points = valid_depth_points + 1.0
+            if valid_depth_points > 0.0:
+                avg_depth[i] = avg_depth[i] / valid_depth_points
+            else:
+                avg_depth[i] = 0.0
             areas[i] = cv2.contourArea(contours[i])
 
             # Automatically select contours that have a low area, because
@@ -325,17 +332,24 @@ class Contours(DenseToSparse):
 
         chosen = np.bitwise_or(chosen_random, chosen_area)
 
-        print("selected ", np.count_nonzero(
-            chosen_random), " contours at random.")
-        print("selected ", np.count_nonzero(
-            chosen_area), " contours because of small area.")
+        print("selected " + str(np.count_nonzero(chosen_random)) +
+              " contours at random.")
+        print("selected " + str(np.count_nonzero(chosen_area)) +
+              " contours because of small area.")
 
-        print("selected ", np.count_nonzero(chosen), " in total.")
+        print("selected " + str(np.count_nonzero(chosen)) + " in total.")
 
         mask = np.zeros(depth_mask.shape, np.uint8)
-        cv2.drawContours(mask,
-                         [c for i, c in enumerate(contours) if chosen[i]],
-                         -1, 255, -1)
+        cv2.drawContours(
+            mask, [c for i, c in enumerate(contours) if chosen[i]],
+            thickness=-1,
+            color=255,
+            contourIdx=-1)
+        # cv2.drawContours(
+        #     mask, [c for i, c in enumerate(contours) if chosen[i]],
+        #     thickness=1,
+        #     color=255,
+        #     contourIdx=-1)
 
         return np.bitwise_and(depth_mask, mask != 0)
 
@@ -354,35 +368,129 @@ class Superpixels(DenseToSparse):
     def depth_mask(self, rgb, depth):
         depth_mask = depth != 0.0
 
-        seeds = cv2.ximgproc.createSuperpixelSEEDS(
-            np.size(rgb, 1), np.size(rgb, 0), 3, self.num_samples, 8)
+        print("plipp")
 
-        seeds.iterate(rgb, 8)
+        num_superpixels = 10000
+
+        seeds = cv2.ximgproc.createSuperpixelSEEDS(
+            np.size(rgb, 1),
+            np.size(rgb, 0),
+            3,
+            num_levels=10,
+            double_step=True,
+            num_superpixels=num_superpixels)
+
+        seeds.iterate(rgb, 10)
 
         labels_out = seeds.getLabels()
 
-        num_labels = self.num_samples
+        debug_mask = seeds.getLabelContourMask(rgb, thick_line=True)
+        plt.imshow(debug_mask)
+        plt.show()
 
-        randomness = "uar"
-        if randomness == "uar":
-            choices = np.random.choice(
-                [0, 1], size=self.num_samples, replace=True, p=[0.1, 0.9])
-            chosen = [i for i, choice in enumerate(choices) if choice == 1]
+        if (True):
+
+            im2, contours, hierarchy = cv2.findContours(
+                debug_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+            chosen_area = np.zeros(len(contours), dtype=bool)
+            areas = np.zeros(len(contours))
+            avg_depth = np.zeros(len(contours))
+            for i in range(0, len(contours)):
+                valid_depth_points = 0.0
+                for contour_point in contours[i]:
+                    depth_m = depth[contour_point[0][1], contour_point[0][0]]
+                    if (depth_m > 0.0):
+                        avg_depth[i] = avg_depth[i] + depth_m
+                        valid_depth_points = valid_depth_points + 1.0
+                if valid_depth_points > 0.0:
+                    avg_depth[i] = avg_depth[i] / valid_depth_points
+                else:
+                    avg_depth[i] = 0.0
+                areas[i] = cv2.contourArea(contours[i])
+
+                # Automatically select contours that have a low area, because
+                # it is basically mostly noise or double edges from canny
+                # edge detection.
+                chosen_area[i] = (areas[i] < 10)
+
+            # print "avg_depth: ", avg_depth
+            # print "avg_depth_probabilities: ", avg_depth_probabilities
+            # print "norm avg_depth_probabilities: ", np.linalg.norm(
+            #     avg_depth_probabilities, ord=1)
+            # print "probs: ", len(avg_depth_probabilities)
+            # print "contours: ", len(contours)
+
+            # Choose contours at random with a probability that depends on the
+            # square of the distance to the camera.
+            avg_depth_squared = np.square(avg_depth)
+            contour_weights = np.subtract(
+                1.0, np.divide(avg_depth_squared, np.amax(avg_depth_squared)))
+
+            for i in range(0, len(contours)):
+                print("contour: " + str(i) + " avg depth: " +
+                      str(avg_depth[i]) + " area: " + str(areas[i]) +
+                      " weight: " + str(contour_weights[i]) + " choses: " +
+                      str(chosen_area[i]))
+
+            chosen_random = np.zeros(len(contours), dtype=bool)
+            for i in range(0, len(contours)):
+                chosen_random[i] = (np.random.random() < contour_weights[i])
+                # print "contour ", i, " probability: ", contour_weights[
+                #     i], " chosen: ", chosen_random[
+                #         i], " distance: ", avg_depth[i]
+
+            #
+            # chosen_random = np.random.choice(
+            #     range(0, len(contours)),
+            #     size=len(contours),
+            #     replace=False,
+            #     p=avg_depth_probabilities)
+
+            chosen = np.bitwise_or(chosen_random, chosen_area)
+
+            print("selected " + str(np.count_nonzero(chosen_random)) +
+                  " contours at random.")
+            print("selected " + str(np.count_nonzero(chosen_area)) +
+                  " contours because of small area.")
+
+            print("selected " + str(np.count_nonzero(chosen)) + " in total.")
+
+            mask = np.zeros(depth_mask.shape, np.uint8)
+            cv2.drawContours(
+                mask, [c for i, c in enumerate(contours) if chosen[i]],
+                thickness=-1,
+                color=255,
+                contourIdx=-1)
+            # cv2.drawContours(
+            #     mask, [c for i, c in enumerate(contours) if chosen[i]],
+            #     thickness=1,
+            #     color=255,
+            #     contourIdx=-1)
+
+            return np.bitwise_and(depth_mask, mask != 0)
         else:
-            # Thinking in process here...
-            probs = np.ones(np.shape(depth_mask), np.uint32)
-            chosen = []
-            choice = np.random.choice(
-                num_labels, size=1, replace=False, p=probs)
+            randomness = "uar"
+            # if randomness == "uar":
+            choices = np.random.choice(
+                [0, 1], size=num_superpixels, replace=True, p=[0.33, 0.67])
+            chosen = [i for i, choice in enumerate(choices) if choice == 1]
 
-            chosen_pixels = labels_out == choice
+            # else:
+            #     # Thinking in process here...
+            #     probs = np.ones(np.shape(depth_mask), np.uint32)
+            #     chosen = []
+            #     choice = np.random.choice(
+            #         num_labels, size=1, replace=False, p=probs)
+            #
+            #     chosen_pixels = labels_out == choice
+            #
+            #     for i in xrange(self.num_samples):
+            #         chosen += choice
 
-            for i in xrange(self.num_samples):
-                chosen += choice
+            mask = np.zeros(depth_mask.shape, np.bool)
 
-        mask = np.zeros(depth_mask.shape, np.bool)
+            for i in chosen:
+                mask[labels_out == i] = 1
 
-        for i in chosen:
-            mask[labels_out == i] = 1
-
-        return np.bitwise_and(depth_mask, mask)
+            return np.bitwise_and(depth_mask, mask)
