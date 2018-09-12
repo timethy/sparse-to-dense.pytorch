@@ -21,7 +21,7 @@ class DenseToSparse:
         sparse_depth[mask_keep] = depth[mask_keep]
 
         if self.apply_kinect_noise:
-            return DenseToSparse.apply_kinect_noise(self, sparse_depth)
+            DenseToSparse.apply_kinect_noise(self, mask_keep, sparse_depth)
 
         return sparse_depth
 
@@ -31,23 +31,25 @@ class DenseToSparse:
     def __repr__(self):
         pass
 
-    def apply_kinect_noise(self, depth):
-        print("applying kinect noise...")
 
-        width = depth.shape[0]
-        height = depth.shape[1]
-        for v in range(0, height):
-            for u in range(0, width):
-                depth_m = depth[u, v]
-                if depth_m > 0.0 and np.isfinite(depth_m):
-                    sigma = 0.0012 + 0.0019 * (depth_m - 0.4) * (depth_m - 0.4)
-                    depth[u, v] = np.random.normal(depth_m, sigma, 1)
+    # Careful: This applies noise in situ! (depth is changed) for performance.
+    def apply_kinect_noise(self, mask, depth):
+        # print("applying kinect noise...")
+        dm04 = depth[mask] - 0.4
+        depth[mask] += np.random.normal(0.0, 0.0019 * dm04 * dm04 + 0.0012)
+
+        #width = depth.shape[0]
+        #height = depth.shape[1]
+        #for v in xrange(0, height):
+        #    for u in xrange(0, width):
+        #        depth_m = depth[u, v]
+        #        if depth_m > 0.0 and np.isfinite(depth_m):
+        #            sigma = 0.0012 + 0.0019 * (depth_m - 0.4) * (depth_m - 0.4)
+        #            depth[u, v] = np.random.normal(depth_m, sigma, 1)
                     # print "mapped depth ", depth_m, " to noisy depth ", depth[
                     #     u, v]
 
-        print("done.")
-
-        return depth.copy()
+        # print("done.")
 
 
 class UniformSampling(DenseToSparse):
@@ -296,7 +298,7 @@ class Contours(DenseToSparse):
             valid_depth_points = 0.0
             for contour_point in contours[i]:
                 depth_m = depth[contour_point[0][1], contour_point[0][0]]
-                if (depth_m > 0.0):
+                if depth_m > 0.0:
                     avg_depth[i] = avg_depth[i] + depth_m
                     valid_depth_points = valid_depth_points + 1.0
             if valid_depth_points > 0.0:
@@ -332,12 +334,12 @@ class Contours(DenseToSparse):
 
         chosen = np.bitwise_or(chosen_random, chosen_area)
 
-        print("selected " + str(np.count_nonzero(chosen_random)) +
-              " contours at random.")
-        print("selected " + str(np.count_nonzero(chosen_area)) +
-              " contours because of small area.")
+        #print("selected " + str(np.count_nonzero(chosen_random)) +
+        #      " contours at random.")
+        #print("selected " + str(np.count_nonzero(chosen_area)) +
+        #      " contours because of small area.")
 
-        print("selected " + str(np.count_nonzero(chosen)) + " in total.")
+        #print("selected " + str(np.count_nonzero(chosen)) + " in total.")
 
         mask = np.zeros(depth_mask.shape, np.uint8)
         cv2.drawContours(
