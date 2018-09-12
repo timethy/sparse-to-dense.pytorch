@@ -36,7 +36,10 @@ class Result(object):
         output = output[valid_mask]
         target = target[valid_mask]
 
-        abs_diff = (output - target).abs()
+        if np.count_nonzero(valid_mask) > 0:
+            abs_diff = (output - target).abs()
+        else:
+            return # simply ignore..
 
         self.mse = (torch.pow(abs_diff, 2)).mean()
         self.rmse = math.sqrt(self.mse)
