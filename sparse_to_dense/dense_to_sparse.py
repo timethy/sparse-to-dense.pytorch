@@ -15,13 +15,22 @@ class DenseToSparse:
         pass
 
     def dense_to_sparse(self, rgb, depth):
+        mask_keep = self.depth_mask(rgb, depth)
+        sparse_depth = np.zeros(depth.shape)
+        sparse_depth[mask_keep] = depth[mask_keep]
+
+        if self.apply_kinect_noise:
+            return DenseToSparse.apply_kinect_noise(self, sparse_depth)
+
+        return sparse_depth
+
+    def depth_mask(self, rgb, depth):
         pass
 
     def __repr__(self):
         pass
 
     def apply_kinect_noise(self, depth):
-
         print "applying kinect noise..."
 
         width = depth.shape[0]
@@ -52,7 +61,7 @@ class UniformSampling(DenseToSparse):
         return "%s{ns=%d,md=%.4f}" % (self.name, self.num_samples,
                                       self.max_depth)
 
-    def dense_to_sparse(self, rgb, depth):
+    def depth_mask(self, rgb, depth):
         """
         Samples pixels with `num_samples`/#pixels probability in `depth`.
         Only pixels with a maximum depth of `max_depth` are considered.
@@ -102,10 +111,7 @@ class SimulatedStereo(DenseToSparse):
     # Take simple sobel gradients
     # Threshold the edge gradient
     # Dilatate
-    def dense_to_sparse(self, rgb, depth):
-        if self.apply_kinect_noise:
-            depth = DenseToSparse.apply_kinect_noise(self, depth)
-
+    def depth_mask(self, rgb, depth):
         gray = rgb2grayscale(rgb)
 
         depth_mask = np.bitwise_and(depth != 0.0, depth <= self.max_depth)
@@ -182,10 +188,7 @@ class SimulatedKinect(DenseToSparse):
         return "%s{ns=%d,wm=%.4f,wd=%.4f}" % \
                (self.name, self.num_samples, self.weight_magnitude, self.weight_depth)
 
-    def dense_to_sparse(self, rgb, depth):
-        if self.apply_kinect_noise:
-            depth = DenseToSparse.apply_kinect_noise(self, depth)
-
+    def depth_mask(self, rgb, depth):
         gray = rgb2grayscale(rgb)
 
         depth_mask = depth != 0.0
@@ -232,126 +235,109 @@ class Contours(DenseToSparse):
     name = "contours"
 
     def __init__(self,
-                 num_samples,
-                 min_val=100,
-                 max_val=200,
+                 probability,
+                 edge_percentage=0.6,
                  apply_kinect_noise=True):
         DenseToSparse.__init__(self, apply_kinect_noise)
-        self.num_samples = num_samples
-        self.min_val = min_val
-        self.max_val = max_val
+        self.probability = probability
+        self.edge_percentage = edge_percentage
 
     def __repr__(self):
-        return "%s{ns=%d,min=%.4f,max=%.4f}" % \
-               (self.name, self.num_samples, self.min_val, self.max_val)
+        return "%s{p=%d,ep=%.4f}" % \
+               (self.name, self.probability, self.edge_percentage)
 
-    def dense_to_sparse(self, rgb, depth):
-        if self.apply_kinect_noise:
-            depth = DenseToSparse.apply_kinect_noise(self, depth)
-
+    def depth_mask(self, rgb, depth):
         depth_mask = depth != 0.0
 
-        non_zeros = np.count_nonzero(depth_mask)
+        gray = rgb2grayscale(rgb)
 
-        if non_zeros <= self.num_samples:
-            return depth_mask
-        else:
-            gray = rgb2grayscale(rgb)
+        # gray = depth
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        gx = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=5)
+        gy = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=5)
+        mag_rgb = cv2.magnitude(gx, gy)
 
-            # gray = depth
-            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-            gx = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=5)
-            gy = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=5)
-            mag_rgb = cv2.magnitude(gx, gy)
+        min_mag_upper_rgb = np.percentile(
+            mag_rgb[depth_mask], self.edge_percentage, interpolation='higher')
+        mag_mask_rgb = np.zeros(depth_mask.shape, np.uint8)
+        mag_mask_rgb[np.bitwise_and(mag_rgb >= min_mag_upper_rgb,
+                                    depth_mask)] = 255
 
-            min_mag_upper_rgb = np.percentile(
-                mag_rgb[depth_mask], 60.0, interpolation='higher')
-            mag_mask_rgb = np.zeros(depth_mask.shape, np.uint8)
-            mag_mask_rgb[np.bitwise_and(mag_rgb >= min_mag_upper_rgb,
-                                        depth_mask)] = 255
+        blurred = cv2.GaussianBlur(depth, (5, 5), 0)
+        gx = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=5)
+        gy = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=5)
+        mag_depth = cv2.magnitude(gx, gy)
 
-            blurred = cv2.GaussianBlur(depth, (5, 5), 0)
-            gx = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=5)
-            gy = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=5)
-            mag_depth = cv2.magnitude(gx, gy)
+        min_mag_upper_depth = np.percentile(
+            mag_depth[depth_mask], self.edge_percentage, interpolation='higher')
+        mag_mask_depth = np.zeros(depth_mask.shape, np.uint8)
+        mag_mask_depth[np.bitwise_and(mag_depth >= min_mag_upper_depth,
+                                      depth_mask)] = 255
 
-            min_mag_upper_depth = np.percentile(
-                mag_depth[depth_mask], 60.0, interpolation='higher')
-            mag_mask_depth = np.zeros(depth_mask.shape, np.uint8)
-            mag_mask_depth[np.bitwise_and(mag_depth >= min_mag_upper_depth,
-                                          depth_mask)] = 255
+        mag_mask = np.bitwise_or(mag_mask_depth, mag_mask_rgb)
 
-            mag_mask = np.bitwise_or(mag_mask_depth, mag_mask_rgb)
+        fig = plt.figure()
+        fig.add_subplot(3, 1, 1)
+        plt.imshow(mag_mask_rgb)
+        fig.add_subplot(3, 1, 2)
+        plt.imshow(mag_mask_depth)
+        fig.add_subplot(3, 1, 3)
+        plt.imshow(mag_mask)
+        plt.show()
 
-            fig = plt.figure()
-            fig.add_subplot(3, 1, 1)
-            plt.imshow(mag_mask_rgb)
-            fig.add_subplot(3, 1, 2)
-            plt.imshow(mag_mask_depth)
-            fig.add_subplot(3, 1, 3)
-            plt.imshow(mag_mask)
-            plt.show()
+        im2, contours, hierarchy = cv2.findContours(
+            mag_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-            im2, contours, hierarchy = cv2.findContours(
-                mag_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        chosen_area = np.zeros(len(contours), dtype=bool)
+        areas = np.zeros(len(contours))
+        avg_depth = np.zeros(len(contours))
+        for i in range(0, len(contours)):
+            for contour_point in contours[i]:
+                avg_depth[i] = avg_depth[i] + depth[contour_point[0][1],
+                                                    contour_point[0][0]]
+            avg_depth[i] = avg_depth[i] / len(contours[i])
+            areas[i] = cv2.contourArea(contours[i])
 
-            chosen_area = np.zeros(len(contours), dtype=bool)
-            areas = np.zeros(len(contours))
-            avg_depth = np.zeros(len(contours))
-            for i in range(0, len(contours)):
-                for contour_point in contours[i]:
-                    avg_depth[i] = avg_depth[i] + depth[contour_point[0][1],
-                                                        contour_point[0][0]]
-                avg_depth[i] = avg_depth[i] / len(contours[i])
-                areas[i] = cv2.contourArea(contours[i])
+            # Automatically select contours that have a low area, because
+            # it is basically mostly noise or double edges from canny
+            # edge detection.
+            chosen_area[i] = (areas[i] < 1000)
 
-                # Automatically select contours that have a low area, because
-                # it is basically mostly noise or double edges from canny
-                # edge detection.
-                chosen_area[i] = (areas[i] < 1000)
+        # print "avg_depth: ", avg_depth
+        # print "avg_depth_probabilities: ", avg_depth_probabilities
+        # print "norm avg_depth_probabilities: ", np.linalg.norm(
+        #     avg_depth_probabilities, ord=1)
+        # print "probs: ", len(avg_depth_probabilities)
+        # print "contours: ", len(contours)
 
-            # print "avg_depth: ", avg_depth
-            # print "avg_depth_probabilities: ", avg_depth_probabilities
-            # print "norm avg_depth_probabilities: ", np.linalg.norm(
-            #     avg_depth_probabilities, ord=1)
-            # print "probs: ", len(avg_depth_probabilities)
-            # print "contours: ", len(contours)
+        # Choose contours at random with a probability that depends on the
+        # square of the distance to the camera.
+        avg_depth_squared = np.square(avg_depth)
+        contour_weights = self.probability * np.subtract(
+            1.0, np.divide(avg_depth_squared, np.amax(avg_depth_squared)))
 
-            # Choose contours at random with a probability that depends on the
-            # square of the distance to the camera.
-            avg_depth_squared = np.square(avg_depth)
-            contour_weights = np.subtract(
-                1.0, np.divide(avg_depth_squared, np.amax(avg_depth_squared)))
+        chosen_random = np.zeros(len(contours), dtype=bool)
+        for i in range(0, len(contours)):
+            chosen_random[i] = (np.random.random() < contour_weights[i])
+            # print "contour ", i, " probability: ", contour_weights[
+            #     i], " chosen: ", chosen_random[
+            #         i], " distance: ", avg_depth[i]
 
-            chosen_random = np.zeros(len(contours), dtype=bool)
-            for i in range(0, len(contours)):
-                chosen_random[i] = (np.random.random() < contour_weights[i])
-                # print "contour ", i, " probability: ", contour_weights[
-                #     i], " chosen: ", chosen_random[
-                #         i], " distance: ", avg_depth[i]
+        chosen = np.bitwise_or(chosen_random, chosen_area)
 
-            #
-            # chosen_random = np.random.choice(
-            #     range(0, len(contours)),
-            #     size=len(contours),
-            #     replace=False,
-            #     p=avg_depth_probabilities)
+        print "selected ", np.count_nonzero(
+            chosen_random), " contours at random."
+        print "selected ", np.count_nonzero(
+            chosen_area), " contours because of small area."
 
-            chosen = np.bitwise_or(chosen_random, chosen_area)
+        print "selected ", np.count_nonzero(chosen), " in total."
 
-            print "selected ", np.count_nonzero(
-                chosen_random), " contours at random."
-            print "selected ", np.count_nonzero(
-                chosen_area), " contours because of small area."
+        mask = np.zeros(depth_mask.shape, np.uint8)
+        cv2.drawContours(mask,
+                         [c for i, c in enumerate(contours) if chosen[i]],
+                         -1, 255, -1)
 
-            print "selected ", np.count_nonzero(chosen), " in total."
-
-            mask = np.zeros(depth_mask.shape, np.uint8)
-            cv2.drawContours(mask,
-                             [c for i, c in enumerate(contours) if chosen[i]],
-                             -1, 255, -1)
-
-            return np.bitwise_and(depth_mask, mask != 0)
+        return np.bitwise_and(depth_mask, mask != 0)
 
 
 class Superpixels(DenseToSparse):
@@ -365,10 +351,7 @@ class Superpixels(DenseToSparse):
         return "%s{ns=%d}" % \
                (self.name, self.num_samples)
 
-    def dense_to_sparse(self, rgb, depth):
-        if self.apply_kinect_noise:
-            depth = DenseToSparse.apply_kinect_noise(self, depth)
-
+    def depth_mask(self, rgb, depth):
         depth_mask = depth != 0.0
 
         seeds = cv2.ximgproc.createSuperpixelSEEDS(

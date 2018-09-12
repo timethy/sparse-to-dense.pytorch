@@ -109,6 +109,11 @@ def add_sparsifier_args(parser):
     parser.add_argument('--weight-magnitude', default=1.0, type=float)
     parser.add_argument('--weight-depth', default=1.0, type=float)
 
+    parser.add_argument('--probability', default=1.0, type=float)
+    parser.add_argument('--edge-percentage', default=60.0, type=float)
+
+    parser.add_argument('--kinect-noise')
+
 
 add_sparsifier_args(parser)
 
@@ -130,9 +135,11 @@ def choose_sparsifier(args):
         return SimulatedKinect(num_samples=args.num_samples,
                                weight_magnitude=args.weight_magnitude, weight_depth=args.weight_depth)
     elif args.sparsifier == Contours.name:
-        return Contours(num_samples=args.num_samples)
+        return Contours(probability=args.probability, edge_percentage=args.edge_percentage,
+                        apply_kinect_noise=args.kinect_noise)
     elif args.sparsifier == Superpixels.name:
-        return Superpixels(num_samples=args.num_samples)
+        return Superpixels(num_samples=args.num_samples,
+                           apply_kinect_noise=args.kinect_noise)
     return None
 
 

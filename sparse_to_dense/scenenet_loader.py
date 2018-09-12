@@ -101,10 +101,7 @@ class ScenenetDataset(data.Dataset):
         if self.sparsifier is None:
             return depth
         else:
-            mask_keep = self.sparsifier.dense_to_sparse(rgb, depth)
-            sparse_depth = np.zeros(depth.shape)
-            sparse_depth[mask_keep] = depth[mask_keep]
-            return sparse_depth
+            return self.sparsifier.dense_to_sparse(rgb, depth)
 
     def create_rgbd(self, rgb, depth):
         sparse_depth = self.create_sparse_depth(rgb, depth)
