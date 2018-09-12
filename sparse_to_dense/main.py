@@ -112,7 +112,7 @@ def add_sparsifier_args(parser):
     parser.add_argument('--probability', default=1.0, type=float)
     parser.add_argument('--edge-percentage', default=60.0, type=float)
 
-    parser.add_argument('--kinect-noise')
+    parser.add_argument('--kinect-noise', action='store_true')
 
 
 add_sparsifier_args(parser)

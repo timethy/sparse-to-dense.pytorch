@@ -31,7 +31,7 @@ class DenseToSparse:
         pass
 
     def apply_kinect_noise(self, depth):
-        print "applying kinect noise..."
+        print("applying kinect noise...")
 
         width = depth.shape[0]
         height = depth.shape[1]
@@ -44,7 +44,7 @@ class DenseToSparse:
                     # print "mapped depth ", depth_m, " to noisy depth ", depth[
                     #     u, v]
 
-        print "done."
+        print("done.")
 
         return depth.copy()
 
@@ -276,14 +276,14 @@ class Contours(DenseToSparse):
 
         mag_mask = np.bitwise_or(mag_mask_depth, mag_mask_rgb)
 
-        fig = plt.figure()
-        fig.add_subplot(3, 1, 1)
-        plt.imshow(mag_mask_rgb)
-        fig.add_subplot(3, 1, 2)
-        plt.imshow(mag_mask_depth)
-        fig.add_subplot(3, 1, 3)
-        plt.imshow(mag_mask)
-        plt.show()
+        # fig = plt.figure()
+        # fig.add_subplot(3, 1, 1)
+        # plt.imshow(mag_mask_rgb)
+        # fig.add_subplot(3, 1, 2)
+        # plt.imshow(mag_mask_depth)
+        # fig.add_subplot(3, 1, 3)
+        # plt.imshow(mag_mask)
+        # plt.show()
 
         im2, contours, hierarchy = cv2.findContours(
             mag_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -325,12 +325,12 @@ class Contours(DenseToSparse):
 
         chosen = np.bitwise_or(chosen_random, chosen_area)
 
-        print "selected ", np.count_nonzero(
-            chosen_random), " contours at random."
-        print "selected ", np.count_nonzero(
-            chosen_area), " contours because of small area."
+        print("selected ", np.count_nonzero(
+            chosen_random), " contours at random.")
+        print("selected ", np.count_nonzero(
+            chosen_area), " contours because of small area.")
 
-        print "selected ", np.count_nonzero(chosen), " in total."
+        print("selected ", np.count_nonzero(chosen), " in total.")
 
         mask = np.zeros(depth_mask.shape, np.uint8)
         cv2.drawContours(mask,
