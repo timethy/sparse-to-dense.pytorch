@@ -13,11 +13,12 @@ class Unpool(nn.Module):
         self.num_channels = num_channels
         self.stride = stride
 
-        # create kernel [1, 0; 0, 0]
-        self.weights = torch.autograd.Variable(torch.zeros(num_channels, 1, stride, stride).cuda()) # currently not compatible with running on CPU 
-        self.weights[:,:,0,0] = 1
-
     def forward(self, x):
+        # create kernel [1, 0; 0, 0]
+        self.weights = torch.autograd.Variable(
+            torch.zeros(self.num_channels, 1, self.stride, self.stride).cuda()) # currently not compatible with running on CPU
+        self.weights[:, :, 0, 0] = 1
+
         return F.conv_transpose2d(x, self.weights, stride=self.stride, groups=self.num_channels)
 
 def weights_init(m):
