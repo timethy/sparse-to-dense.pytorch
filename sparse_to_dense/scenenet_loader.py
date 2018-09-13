@@ -50,6 +50,9 @@ def find_paths_and_frames(trajectories, trajectory_indices):
     return paths_and_frames
 
 
+color_jitter = transforms.ColorJitter(0.4, 0.4, 0.4)
+
+
 def train_transform(oheight, owidth):
     do_flip = np.random.uniform(0.0, 1.0) < 0.5  # random horizontal flip
 
@@ -57,7 +60,7 @@ def train_transform(oheight, owidth):
         transforms.CenterCrop((oheight, owidth)),
         transforms.HorizontalFlip(do_flip)]
 
-    return transforms.Compose(ts), transforms.Compose(ts + [transforms.ColorJitter(0.4, 0.4, 0.4)])
+    return transforms.Compose(ts), transforms.Compose(ts + [color_jitter])
 
 
 def val_transform(oheight, owidth):
@@ -74,13 +77,14 @@ class ScenenetDataset(data.Dataset):
                  sparsifier=None, modality='rgb', loader=load_trajectory_image):
         trajectories = find_trajectories(root)
         print("Found %d trajectories" % len(trajectories))
+        self.type = type
         self.oheight = oheight
         self.owidth = owidth
-        self.transform = train_transform if type == 'train' else val_transform
+        self.transform = train_transform if self.type == 'train' else val_transform
 
         self.root = root
 
-        if type not in ['train', 'val']:
+        if self.type not in ['train', 'val']:
             raise (RuntimeError("Invalid dataset type: " + type + "\n"
                                 "Supported dataset types are: train, val"))
         self.loader = loader
@@ -101,7 +105,10 @@ class ScenenetDataset(data.Dataset):
         if self.sparsifier is None:
             return depth
         else:
-            return self.sparsifier.dense_to_sparse(rgb, depth)
+            seed = None
+            if self.type == 'val':
+                seed = 131732859  # Tim's favorite random number
+            return self.sparsifier.dense_to_sparse(rgb, depth, seed)
 
     def create_rgbd(self, rgb, depth):
         sparse_depth = self.create_sparse_depth(rgb, depth)

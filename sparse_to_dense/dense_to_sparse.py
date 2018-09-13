@@ -15,7 +15,9 @@ class DenseToSparse:
         self.apply_kinect_noise = apply_kinect_noise
         pass
 
-    def dense_to_sparse(self, rgb, depth):
+    def dense_to_sparse(self, rgb, depth, seed=None):
+        if seed is not None:
+            np.random.seed(seed)
         mask_keep = self.depth_mask(rgb, depth)
         sparse_depth = np.zeros(depth.shape)
         sparse_depth[mask_keep] = depth[mask_keep]
@@ -99,6 +101,7 @@ class SimulatedStereo(DenseToSparse):
         self.max_depth = max_depth
         self.dilate_kernel = dilate_kernel
         self.dilate_iterations = dilate_iterations
+        self.kernel = np.ones((self.dilate_kernel, self.dilate_kernel), dtype=np.uint8)
 
     def __repr__(self):
         return "%s{ns=%d,md=%.4f,dil=%d.%d}" % \
@@ -130,10 +133,9 @@ class SimulatedStereo(DenseToSparse):
             mag_mask = np.bitwise_and(mag >= min_mag_upper, depth_mask)
 
             if self.dilate_iterations >= 0:
-                kernel = np.ones((self.dilate_kernel, self.dilate_kernel), dtype=np.uint8)
                 return cv2.dilate(
                     mag_mask.astype(np.uint8),
-                    kernel,
+                    self.kernel,
                     iterations=self.dilate_iterations) > 0
 
             return mag_mask
@@ -215,8 +217,7 @@ class Contours(DenseToSparse):
         self.edge_percentage = edge_percentage
 
     def __repr__(self):
-        return "%s{p=%.4f,ep=%.4f}" % \
-               (self.name, self.probability, self.edge_percentage)
+        return "%s{p=%.4f,ep=%.4f}" % (self.name, self.probability, self.edge_percentage)
 
     def depth_mask(self, rgb, depth):
         depth_mask = depth != 0.0
@@ -231,22 +232,19 @@ class Contours(DenseToSparse):
 
         min_mag_upper_rgb = np.percentile(
             mag_rgb[depth_mask], self.edge_percentage, interpolation='higher')
-        mag_mask_rgb = np.zeros(depth_mask.shape, np.uint8)
-        mag_mask_rgb[np.bitwise_and(mag_rgb >= min_mag_upper_rgb,
-                                    depth_mask)] = 255
 
         blurred = cv2.GaussianBlur(depth, (5, 5), 0)
         gx = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=5)
         gy = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=5)
         mag_depth = cv2.magnitude(gx, gy)
 
+        mag_mask = np.zeros(depth_mask.shape, np.uint8)
+
         min_mag_upper_depth = np.percentile(
             mag_depth[depth_mask], self.edge_percentage, interpolation='higher')
-        mag_mask_depth = np.zeros(depth_mask.shape, np.uint8)
-        mag_mask_depth[np.bitwise_and(mag_depth >= min_mag_upper_depth,
-                                      depth_mask)] = 255
 
-        mag_mask = np.bitwise_or(mag_mask_depth, mag_mask_rgb)
+        mag_mask[mag_rgb >= min_mag_upper_rgb] = 255
+        mag_mask[mag_depth >= min_mag_upper_depth] = 255
 
         # fig = plt.figure()
         # fig.add_subplot(3, 1, 1)
@@ -260,8 +258,6 @@ class Contours(DenseToSparse):
         im2, contours, hierarchy = cv2.findContours(
             mag_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-        chosen_area = np.zeros(len(contours), dtype=bool)
-        areas = np.zeros(len(contours))
         avg_depth = np.zeros(len(contours))
         for i in range(0, len(contours)):
             valid_depth_points = 0.0
@@ -274,12 +270,6 @@ class Contours(DenseToSparse):
                 avg_depth[i] = avg_depth[i] / valid_depth_points
             else:
                 avg_depth[i] = 0.0
-            areas[i] = cv2.contourArea(contours[i])
-
-            # Automatically select contours that have a low area, because
-            # it is basically mostly noise or double edges from canny
-            # edge detection.
-            chosen_area[i] = (areas[i] < 1000)
 
         # print "avg_depth: ", avg_depth
         # print "avg_depth_probabilities: ", avg_depth_probabilities
@@ -294,14 +284,7 @@ class Contours(DenseToSparse):
         contour_weights = self.probability * np.subtract(
             1.0, np.divide(avg_depth_squared, np.amax(avg_depth_squared)))
 
-        chosen_random = np.zeros(len(contours), dtype=bool)
-        for i in range(0, len(contours)):
-            chosen_random[i] = (np.random.random() < contour_weights[i])
-            # print "contour ", i, " probability: ", contour_weights[
-            #     i], " chosen: ", chosen_random[
-            #         i], " distance: ", avg_depth[i]
-
-        chosen = np.bitwise_or(chosen_random, chosen_area)
+        chosen_random = np.random.random(len(contours)) < contour_weights
 
         #print("selected " + str(np.count_nonzero(chosen_random)) +
         #      " contours at random.")
@@ -311,18 +294,16 @@ class Contours(DenseToSparse):
         #print("selected " + str(np.count_nonzero(chosen)) + " in total.")
 
         mask = np.zeros(depth_mask.shape, np.uint8)
+        # Automatically select contours that have a low area, because
+        # it is basically mostly noise or double edges from canny
+        # edge detection.
         cv2.drawContours(
-            mask, [c for i, c in enumerate(contours) if chosen[i]],
+            mask, [c for i, c in enumerate(contours) if chosen_random[i] or cv2.contourArea(c) < 1000],
             thickness=-1,
             color=255,
             contourIdx=-1)
-        # cv2.drawContours(
-        #     mask, [c for i, c in enumerate(contours) if chosen[i]],
-        #     thickness=1,
-        #     color=255,
-        #     contourIdx=-1)
 
-        return np.bitwise_and(depth_mask, mask != 0)
+        return mask != 0
 
 
 class Superpixels(DenseToSparse):
@@ -360,7 +341,6 @@ class Superpixels(DenseToSparse):
         plt.show()
 
         if (True):
-
             im2, contours, hierarchy = cv2.findContours(
                 debug_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -456,7 +436,7 @@ class Superpixels(DenseToSparse):
             #
             #     chosen_pixels = labels_out == choice
             #
-            #     for i in xrange(self.num_samples):
+            #     for i in range(self.num_samples):
             #         chosen += choice
 
             mask = np.zeros(depth_mask.shape, np.bool)

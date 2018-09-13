@@ -52,33 +52,26 @@ def h5_loader(subtype, path):
 
     return rgb, depth
 
-iheight, iwidth = 480, 640 # raw image size
+iheight, iwidth = 480, 640  # raw image size
 color_jitter = transforms.ColorJitter(0.4, 0.4, 0.4)
 
-def train_transform(is_small_world, rgb, depth, oheight, owidth):
+
+def train_transform(rgb, depth, oheight, owidth):
     s = np.random.uniform(1.0, 1.5)  # random scaling
     # print("scale factor s={}".format(s))
     depth_np = depth / s
-    angle = np.random.uniform(-5.0, 5.0) # random rotation degrees
+    angle = np.random.uniform(-5.0, 5.0)  # random rotation degrees
     do_flip = np.random.uniform(0.0, 1.0) < 0.5  # random horizontal flip
 
-    # perform 1st part of data augmentation
-    if is_small_world:
-        transform = transforms.Compose([
-            transforms.Resize(oheight / iheight * s),
-            transforms.CenterCrop((oheight, owidth)),
-            transforms.HorizontalFlip(do_flip)
-        ])
-    else:
-        transform = transforms.Compose([
-            # Crop so we don't have white frame in rgb image
-            transforms.CenterCrop((228*2, 304*2)),
-            transforms.Resize(250.0 / (228*2)),
-            transforms.Rotate(angle),
-            transforms.Resize(s),
-            transforms.CenterCrop((oheight, owidth)),
-            transforms.HorizontalFlip(do_flip)
-        ])
+    transform = transforms.Compose([
+        # Crop so we don't have white frame in rgb image
+        transforms.CenterCrop((228*2, 304*2)),
+        transforms.Resize(250.0 / (228*2)),
+        transforms.Rotate(angle),
+        transforms.Resize(s),
+        transforms.CenterCrop((oheight, owidth)),
+        transforms.HorizontalFlip(do_flip)
+    ])
 
     rgb_np = transform(rgb)
 
@@ -106,19 +99,13 @@ def raw_val_transform(rgb, depth, oheight, owidth):
     return rgb_np, depth_np
 
 
-def val_transform(is_small_world, rgb, depth, oheight, owidth):
+def val_transform(rgb, depth, oheight, owidth):
     # perform 1st part of data augmentation
-    if is_small_world:
-        transform = transforms.Compose([
-            transforms.Resize(oheight / iheight),
-            transforms.CenterCrop((oheight, owidth))
-        ])
-    else:
-        transform = transforms.Compose([
-            transforms.CenterCrop((228*2, 304*2)),  # 480-24
-            transforms.Resize(oheight / (228*2)),
-            transforms.CenterCrop((oheight, owidth)),
-        ])
+    transform = transforms.Compose([
+        transforms.CenterCrop((228*2, 304*2)),  # 480-24
+        transforms.Resize(oheight / (228*2)),
+        transforms.CenterCrop((oheight, owidth)),
+    ])
     rgb_np = transform(rgb)
     rgb_np = np.asfarray(rgb_np, dtype='float') / 255
     depth_np = transform(depth)
@@ -172,7 +159,10 @@ class NYUDataset(data.Dataset):
         if self.sparsifier is None:
             return depth
         else:
-            return self.sparsifier.dense_to_sparse(rgb, depth)
+            seed = None
+            if self.type == 'val':
+                seed = 131732859  # Tim's favorite random number
+            return self.sparsifier.dense_to_sparse(rgb, depth, seed)
 
     def create_rgbd(self, rgb, depth):
         sparse_depth = self.create_sparse_depth(rgb, depth)
@@ -205,10 +195,7 @@ class NYUDataset(data.Dataset):
         """
         rgb, depth = self.__getraw__(index)
         if self.transform is not None:
-            # This is hacky, and should be cleand up properly.
-            # But we have different transforms for different data-sets
-            is_small_world = "small-world" in self.root
-            rgb_np, depth_np = self.transform(is_small_world, rgb, depth, self.oheight, self.owidth)
+            rgb_np, depth_np = self.transform(rgb, depth, self.oheight, self.owidth)
         else:
             raise(RuntimeError("transform not defined"))
 
