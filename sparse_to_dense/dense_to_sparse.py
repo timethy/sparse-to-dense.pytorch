@@ -70,9 +70,6 @@ class UniformSampling(DenseToSparse):
         Only pixels with a maximum depth of `max_depth` are considered.
         If no `max_depth` is given, samples in all pixels
         """
-        if self.apply_kinect_noise:
-            depth = DenseToSparse.apply_kinect_noise(self, depth)
-
         if self.max_depth is not np.inf:
             mask_keep = depth <= self.max_depth
             n_keep = np.count_nonzero(mask_keep)
