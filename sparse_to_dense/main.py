@@ -26,7 +26,7 @@ from sparse_to_dense import utils
 model_names = ['resnet18', 'resnet50']
 loss_names = ['l1', 'l2']
 # If u specify nyuraw, we run evaluation on it
-data_names = ['nyudepthv2', 'nyuraw', "scenenet", "scenenet-24", "small-world-4"]
+data_names = ['nyudepthv2', "scenenet", "scenenet-24"]
 sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo, SimulatedKinect, Contours, Superpixels]]
 decoder_names = Decoder.names
 modality_names = NYUDataset.modality_names
@@ -79,7 +79,7 @@ parser.add_argument('--print-freq', '-p', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
-parser.add_argument('--relative-depth')
+parser.add_argument('--validate-on-raw', action='store_true')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                     help='evaluate model on validation set')
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
@@ -142,7 +142,6 @@ def choose_sparsifier(args):
                            apply_kinect_noise=args.kinect_noise)
     return None
 
-
 def main():
     global args, best_result, output_directory, train_csv, test_csv
     args = parser.parse_args()
@@ -179,8 +178,11 @@ def main():
     traindir = os.path.join('data', args.data, 'train')
     valdir = os.path.join('data', args.data, 'val')
 
-    if args.data == "nyuraw":
+    if args.validate_on_raw:
         best_model_filename = args.resume or os.path.join(output_directory, 'model_best.pth.tar')
+        output_directory += '/raw' # seperate directory
+        if not os.path.exists(output_directory):
+            os.makedirs(output_directory)
         if os.path.isfile(best_model_filename):
             print("=> loading best model '{}'".format(best_model_filename))
             checkpoint = torch.load(best_model_filename)
@@ -191,7 +193,7 @@ def main():
         else:
             print("=> no best model found at '{}'".format(best_model_filename))
             return
-        validate_on_raw(sparsifier, 'nyu_depth_v2_labeled.mat', model, checkpoint['epoch'], write_to_file=False)
+        validate_on_raw(sparsifier, 'nyu_depth_v2_labeled.mat', model, checkpoint['epoch'])
         return
     elif args.data in ["nyudepthv2", "small-world-4"]:
         if not args.evaluate:
@@ -262,7 +264,6 @@ def main():
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
             return
-
     # create new model
     else:
         # define model
@@ -407,30 +408,10 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
         depth = np.transpose(depths[i, :, :])
         depth_raw = np.transpose(depths_raw[i, :, :])
 
-        #print(np.count_nonzero(np.isinf(depth)))
-        #print(np.count_nonzero(np.isinf(depth_raw)))
-        #print(np.count_nonzero(depth_raw < 0.0))
-        #print(np.count_nonzero(depth_raw == 0.0))
-
-        #print(depth)
-        #print(depth_raw)
-        #print(np.shape(depth))
-        #print(np.shape(depth_raw))
-
         rgb_np, depth_np = raw_val_transform(rgb, depth, oheight=args.height, owidth=args.width)
         rgb_np, depth_raw_np = raw_val_transform(rgb, depth_raw, oheight=args.height, owidth=args.width)
 
-        mask_keep = sparsifier.dense_to_sparse(rgb_np, depth_raw_np)
-        sparse_depth_raw = np.zeros(depth_raw_np.shape)
-        sparse_depth_raw[mask_keep] = depth_raw_np[mask_keep]
-
-        #print(np.shape(rgb_np))
-        #print(np.shape(depth_np))
-        #print(np.shape(depth_raw_np))
-        #print("after transformation")
-        #print(np.count_nonzero(depth_raw_np == 0.0))
-
-        #print(rgb_np)
+        sparse_depth_raw = sparsifier.dense_to_sparse(rgb_np, depth_raw_np)
 
         # Treat input as batch with size 1
         rgbd = np.append(rgb_np, np.expand_dims(sparse_depth_raw, axis=2), axis=2)
@@ -443,9 +424,6 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
         target = to_tensor(depth_np)
         target = target.unsqueeze(0)
         target = target.unsqueeze(0)
-
-        #print(input.shape)
-        #print(target.shape)
 
         input, target = input.cuda(), target.cuda()
         input_var = torch.autograd.Variable(input)
@@ -476,34 +454,30 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
         average_meter.update(result, gpu_time, data_time, input.size(0))
         end = time.time()
 
-        # save a couple images for visualization not too sparse, but good rmse
-        if result.rmse < 1.0 and in_valid.int().sum() <= 61440:  # 80% sparsity
-            print("Got %d good images with rmse %f, #samples %d @%d" % (num_images, result.rmse, in_valid.int().sum(), i))
+        if args.modality == 'rgb':
+            rgb = input
+        elif args.modality == 'rgbd':
+            rgb = input[:, :3, :, :]
+            depth = input[:, 3:, :, :]
 
-            if args.modality == 'rgb':
-                rgb = input
-            elif args.modality == 'rgbd':
-                rgb = input[:, :3, :, :]
-                depth = input[:, 3:, :, :]
-
-            if num_images == 0:
-                num_images += 1
-                if args.modality == 'rgbd':
-                    img_merge = utils.merge_into_row_with_gt_and_err(rgb, depth, target, depth_pred)
-                else:
-                    img_merge = utils.merge_into_row(rgb, target, depth_pred)
-            elif num_images < 16:
-                num_images += 1
-                if args.modality == 'rgbd':
-                    row = utils.merge_into_row_with_gt_and_err(rgb, depth, target, depth_pred)
-                else:
-                    row = utils.merge_into_row(rgb, target, depth_pred)
-                img_merge = utils.add_row(img_merge, row)
-                if num_images == 16:
-                    filename = output_directory + '/comparison_' + str(epoch) + '.png'
-                    utils.save_image(img_merge, filename)
+        if num_images == 0:
+            num_images += 1
+            if args.modality == 'rgbd':
+                img_merge = utils.merge_into_row_with_gt_and_err(rgb, depth, target, depth_pred)
             else:
-                num_images += 1
+                img_merge = utils.merge_into_row(rgb, target, depth_pred)
+        elif num_images < 8:
+            num_images += 1
+            if args.modality == 'rgbd':
+                row = utils.merge_into_row_with_gt_and_err(rgb, depth, target, depth_pred)
+            else:
+                row = utils.merge_into_row(rgb, target, depth_pred)
+            img_merge = utils.add_row(img_merge, row)
+            if num_images == 8:
+                filename = output_directory + '/comparison_' + str(epoch) + '.png'
+                utils.save_image(img_merge, filename)
+        else:
+            num_images += 1
 
         if (i+1) % args.print_freq == 0:
             print('Test: [{0}/{1}]\t'

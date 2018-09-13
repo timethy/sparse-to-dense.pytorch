@@ -86,7 +86,7 @@ def train_transform(rgb, depth, oheight, owidth):
 
 def raw_val_transform(rgb, depth, oheight, owidth):
     # Remove frame of invalid depths
-    n = 4
+    n = 2
     transform = transforms.Compose([
         transforms.CenterCrop((480-n*12, 640-n*16)),
         transforms.Resize(oheight / (480-n*12)),
