@@ -20,10 +20,12 @@ class DenseToSparse:
             np.random.seed(seed)
         mask_keep = self.depth_mask(rgb, depth)
         sparse_depth = np.zeros(depth.shape)
-        sparse_depth[mask_keep] = depth[mask_keep]
 
         if self.apply_kinect_noise:
-            DenseToSparse.apply_kinect_noise(self, mask_keep, sparse_depth)
+            dm04 = depth[mask_keep] - 0.4
+            sparse_depth[mask_keep] = np.random.normal(depth[mask_keep], 0.0019 * dm04 * dm04 + 0.0012)
+        else:
+            sparse_depth[mask_keep] = depth[mask_keep]
 
         return sparse_depth
 
@@ -32,26 +34,6 @@ class DenseToSparse:
 
     def __repr__(self):
         pass
-
-
-    # Careful: This applies noise in situ! (depth is changed) for performance.
-    def apply_kinect_noise(self, mask, depth):
-        # print("applying kinect noise...")
-        dm04 = depth[mask] - 0.4
-        depth[mask] += np.random.normal(0.0, 0.0019 * dm04 * dm04 + 0.0012)
-
-        #width = depth.shape[0]
-        #height = depth.shape[1]
-        #for v in xrange(0, height):
-        #    for u in xrange(0, width):
-        #        depth_m = depth[u, v]
-        #        if depth_m > 0.0 and np.isfinite(depth_m):
-        #            sigma = 0.0012 + 0.0019 * (depth_m - 0.4) * (depth_m - 0.4)
-        #            depth[u, v] = np.random.normal(depth_m, sigma, 1)
-                    # print "mapped depth ", depth_m, " to noisy depth ", depth[
-                    #     u, v]
-
-        # print("done.")
 
 
 class UniformSampling(DenseToSparse):

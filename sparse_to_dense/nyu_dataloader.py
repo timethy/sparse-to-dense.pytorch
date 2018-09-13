@@ -139,12 +139,13 @@ class NYUDataset(data.Dataset):
         self.class_to_idx = class_to_idx
         self.oheight = oheight
         self.owidth = owidth
-        if type == 'train':
+        self.type = type
+        if self.type == 'train':
             self.transform = train_transform
-        elif type == 'val':
+        elif self.type == 'val':
             self.transform = val_transform
         else:
-            raise (RuntimeError("Invalid dataset type: " + type + "\n"
+            raise (RuntimeError("Invalid dataset type: " + self.type + "\n"
                                 "Supported dataset types are: train, val"))
         self.loader = loader
         self.sparsifier = sparsifier
