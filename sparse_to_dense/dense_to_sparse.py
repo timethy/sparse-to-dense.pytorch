@@ -246,7 +246,7 @@ class Contours(DenseToSparse):
         self.edge_percentage = edge_percentage
 
     def __repr__(self):
-        return "%s{p=%d,ep=%.4f}" % \
+        return "%s{p=%.4f,ep=%.4f}" % \
                (self.name, self.probability, self.edge_percentage)
 
     def depth_mask(self, rgb, depth):
