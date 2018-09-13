@@ -125,6 +125,7 @@ class ScenenetDataset(data.Dataset):
         """
         path, i = self.indexed_paths_and_frames[index]
         rgb, depth = self.loader(path, i)
+        depth[depth == np.inf] = 0.0
         if np.all(depth == 0.0):
             raise(RuntimeError("Empty depth map @ %s" % path))
         return rgb, depth

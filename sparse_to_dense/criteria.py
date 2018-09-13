@@ -25,3 +25,4 @@ class MaskedL1Loss(nn.Module):
         diff = diff[valid_mask]
         self.loss = diff.abs().mean()
         return self.loss
+    

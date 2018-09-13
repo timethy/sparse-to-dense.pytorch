@@ -411,10 +411,10 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
         rgb_np, depth_np = raw_val_transform(rgb, depth, oheight=args.height, owidth=args.width)
         rgb_np, depth_raw_np = raw_val_transform(rgb, depth_raw, oheight=args.height, owidth=args.width)
 
-        sparse_depth_raw = sparsifier.dense_to_sparse(rgb_np, depth_raw_np)
+        # sparse_depth_raw = sparsifier.dense_to_sparse(rgb_np, depth_raw_np)
 
         # Treat input as batch with size 1
-        rgbd = np.append(rgb_np, np.expand_dims(sparse_depth_raw, axis=2), axis=2)
+        rgbd = np.append(rgb_np, np.expand_dims(depth_raw_np, axis=2), axis=2)
         # This should switch H x W x C to C x H x W, where C = 4 (depth)
 
         # Unsqueeze for batch size 1
