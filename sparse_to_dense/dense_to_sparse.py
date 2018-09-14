@@ -32,6 +32,7 @@ class DenseToSparse:
     def depth_mask(self, rgb, depth):
         pass
 
+    # TODO: KINECT NOISE
     def __repr__(self):
         pass
 

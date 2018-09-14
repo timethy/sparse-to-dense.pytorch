@@ -79,7 +79,6 @@ parser.add_argument('--print-freq', '-p', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
-parser.add_argument('--validate-on-raw', action='store_true')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                     help='evaluate model on validation set')
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
@@ -92,6 +91,9 @@ parser.add_argument('--width', type=int, metavar='W',
                     default=304, help='The width of the input layer of the network (default: 304)')
 parser.add_argument('--height', type=int, metavar='H',
                     default=228, help='The height of the input layer of the network (default: 228)')
+
+parser.add_argument('--validate-on-raw', action='store_true')
+parser.add_argument('--validate-on-raw-sparse', action='store_true')
 
 
 def add_sparsifier_args(parser):
@@ -178,9 +180,13 @@ def main():
     traindir = os.path.join('data', args.data, 'train')
     valdir = os.path.join('data', args.data, 'val')
 
-    if args.validate_on_raw:
+    if args.validate_on_raw or args.validate_on_raw_sparse:
         best_model_filename = args.resume or os.path.join(output_directory, 'model_best.pth.tar')
-        output_directory += '/raw' # seperate directory
+        # seperate directory
+        if args.validate_on_raw:
+            output_directory += '/raw'
+        elif args.validate_on_raw:
+            output_directory += '/raw_sparse'
         if not os.path.exists(output_directory):
             os.makedirs(output_directory)
         if os.path.isfile(best_model_filename):
@@ -193,7 +199,8 @@ def main():
         else:
             print("=> no best model found at '{}'".format(best_model_filename))
             return
-        validate_on_raw(sparsifier, 'nyu_depth_v2_labeled.mat', model, checkpoint['epoch'])
+        validate_on_raw(sparsifier if args.validate_on_raw_sparse else None,
+                        'nyu_depth_v2_labeled.mat', model, checkpoint['epoch'])
         return
     elif args.data in ["nyudepthv2", "small-world-4"]:
         if not args.evaluate:
@@ -410,7 +417,10 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
         rgb_np, depth_np = raw_val_transform(rgb, depth, oheight=args.height, owidth=args.width)
         rgb_np, depth_raw_np = raw_val_transform(rgb, depth_raw, oheight=args.height, owidth=args.width)
 
-        # sparse_depth_raw = sparsifier.dense_to_sparse(rgb_np, depth_raw_np)
+        if sparsifier is not None:
+            depth_np = depth_raw_np
+            # TODO: toggle, sparsifier.apply_kinect_noise = False
+            depth_raw_np = sparsifier.dense_to_sparse(rgb_np, depth_raw_np)
 
         # Treat input as batch with size 1
         rgbd = np.append(rgb_np, np.expand_dims(depth_raw_np, axis=2), axis=2)
