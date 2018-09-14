@@ -60,6 +60,18 @@ class Result(object):
         self.irmse = math.sqrt((torch.pow(abs_inv_diff, 2)).mean())
         self.imae = abs_inv_diff.mean()
 
+    def print_str(self, epoch, divider='\n'):
+        return 'epoch={epoch}{div}' \
+               'mse={average.mse:.2f}{div}' \
+                'rmse={average.rmse:.2f}{div}' \
+                'absrel={average.absrel:.3f}{div}' \
+                'lg10={average.lg10:.3f}{div}' \
+                'mae={average.mae:.3f}{div}' \
+                'delta1={average.delta1:.3f}{div}' \
+                'delta2={average.delta2:.3f}{div}' \
+                'delta3={average.delta3:.3f}{div}' \
+                'gpu_time={average.gpu_time:.4f}'.format(epoch=epoch, average=self, div=divider)
+
 
 class AverageMeter(object):
     def __init__(self):

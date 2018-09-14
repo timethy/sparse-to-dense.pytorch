@@ -312,8 +312,7 @@ def main():
         if is_best:
             best_result = result
             with open(best_txt, 'w') as txtfile:
-                txtfile.write("epoch={}\nmse={:.3f}\nrmse={:.3f}\nabsrel={:.3f}\nlg10={:.3f}\nmae={:.3f}\ndelta1={:.3f}\ndelta2={:.3f}\ndelta3={:.3f}\nt_gpu={:.4f}\n".
-                    format(epoch, result.mse, result.rmse, result.absrel, result.lg10, result.mae, result.delta1, result.delta2, result.delta3, result.gpu_time))
+                txtfile.write(result.print_str(epoch))
             if img_merge is not None:
                 img_filename = output_directory + '/comparison_best.png'
                 utils.save_image(img_merge, img_filename)
@@ -496,16 +495,7 @@ def validate_on_raw(sparsifier, file, model, epoch, write_to_file=True):
         utils.save_image(img_merge, filename)
     avg = average_meter.average()
 
-    print('\n*\n'
-        'RMSE={average.rmse:.3f}\n'
-        'MAE={average.mae:.3f}\n'
-        'Delta1={average.delta1:.3f}\n'
-        'Delta2={average.delta2:.3f}\n'
-        'Delta3={average.delta3:.3f}\n'
-        'REL={average.absrel:.3f}\n'
-        'Lg10={average.lg10:.3f}\n'
-        't_GPU={time:.3f}\n'.format(
-        average=avg, time=avg.gpu_time))
+    print('\n*\n' + avg.print_str(epoch))
 
     if write_to_file:
         with open(test_csv, 'a') as csvfile:
@@ -594,16 +584,7 @@ def validate(val_loader, model, epoch, write_to_file=True):
 
     avg = average_meter.average()
 
-    print('\n*\n'
-        'RMSE={average.rmse:.3f}\n'
-        'MAE={average.mae:.3f}\n'
-        'Delta1={average.delta1:.3f}\n'
-        'Delta2={average.delta2:.3f}\n'
-        'Delta3={average.delta3:.3f}\n'
-        'REL={average.absrel:.3f}\n'
-        'Lg10={average.lg10:.3f}\n'
-        't_GPU={time:.3f}\n'.format(
-        average=avg, time=avg.gpu_time))
+    print('\n*\n' + avg.print_str(epoch))
 
     if write_to_file:
         with open(test_csv, 'a') as csvfile: 
