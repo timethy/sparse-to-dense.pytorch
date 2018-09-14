@@ -19,7 +19,7 @@ class DenseToSparse:
         if seed is not None:
             np.random.seed(seed)
         mask_keep = self.depth_mask(rgb, depth)
-        sparse_depth = np.zeros(depth.shape)
+        sparse_depth = np.zeros(depth.shape, dtype=np.float32)
 
         if self.apply_kinect_noise:
             dm04 = depth[mask_keep] - 0.4
