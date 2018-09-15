@@ -27,7 +27,7 @@ model_names = ['resnet18', 'resnet50']
 loss_names = ['l1', 'l2']
 # If u specify nyuraw, we run evaluation on it
 data_names = ['nyudepthv2', "scenenet", "scenenet-24"]
-sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo, SimulatedKinect, Contours, Superpixels]]
+sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo, SimulatedKinect, Contours, Superpixels]] + ['none']
 decoder_names = Decoder.names
 modality_names = NYUDataset.modality_names
 
@@ -128,7 +128,9 @@ best_result.set_to_worst()
 
 def choose_sparsifier(args):
     max_depth = args.max_depth if args.max_depth >= 0.0 else np.inf
-    if args.sparsifier == UniformSampling.name:
+    if args.sparsifier == 'none':
+        return None
+    elif args.sparsifier == UniformSampling.name:
         return UniformSampling(num_samples=args.num_samples, max_depth=max_depth)
     elif args.sparsifier == SimulatedStereo.name:
         return SimulatedStereo(num_samples=args.num_samples, max_depth=max_depth,
